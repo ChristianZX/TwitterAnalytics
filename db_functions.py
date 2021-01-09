@@ -162,3 +162,20 @@ def create_empty_staging_table(table_name):
     sql = 'CREATE TABLE {} (   index bigint,    id bigint,    conversation_id bigint,    created_at text COLLATE pg_catalog."default",    date text COLLATE pg_catalog."default",     tweet text COLLATE pg_catalog."default",    hashtags text COLLATE pg_catalog."default",    user_id bigint,    username text COLLATE pg_catalog."default",    name text COLLATE pg_catalog."default",    link bigint,    retweet bigint,    nlikes bigint,    nreplies bigint,    nretweets bigint,    quote_url bigint,    user_rt_id bigint,    user_rt bigint,    staging_name text COLLATE pg_catalog."default")'.format(table_name)
     update_table(sql)
 
+def save_pickle(df, filename):
+    """
+    :param filename: filename to load
+    :return: none
+    """
+    with open(filename, 'wb') as file:
+        pickle.dump(df, file)
+
+
+def load_pickle(filename):
+    """
+    :param filename: filename to laod
+    :return: loaded file
+    """
+    with open(filename, 'rb') as file:
+        loaded_file = pickle.load(file)
+    return loaded_file

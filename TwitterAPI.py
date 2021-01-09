@@ -40,6 +40,7 @@ def api_limit():
 
 def API_Followers(screen_name, user_id):
     """
+    Downloads Follower using API. Stops after 1000 pages (5Mio Followers), no matter how many there are.
     :param screen_name: requiered (for SQL purpose)
     :param user_id: requiered
     :param remaning: [optional]: Anzahl der Läufe die ohne sleep durchgeführt werden. Remaing = 1 for auto modus in which 1 minute sleep is used
@@ -52,6 +53,8 @@ def API_Followers(screen_name, user_id):
 
     try:
         for page in tweepy.Cursor(api.followers_ids, user_id=user_id).pages():
+            if count >= 5000:
+                break
             ids.extend(page)
             for index in enumerate(page["ids"]):
                 followers.append(page["ids"][index[0]])
@@ -318,7 +321,7 @@ def API_Friends(user_id, screen_name):
 
     #API call
     try:
-        for page in tweepy.Cursor(api.friends_ids, id = user_id).pages():
+        for page in tweepy.Cursor(api.friends_ids, user_id = user_id).pages():
             ids.extend(page)
             for index in enumerate(page["ids"]):
                 followers.append(page["ids"][index[0]])
