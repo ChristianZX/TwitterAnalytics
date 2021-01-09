@@ -440,9 +440,9 @@ if __name__ == '__main__':
 
     #Refreshes LR-friend rating for all users in hashtag who have a Bert LR rating and follow someone in n_followers
     #The LR-friend rating is based on the LR-self rating of account a user follows
-    # hashtag = 'le0711'
-    # sql = f"SELECT distinct f.follows_ids,       u.screen_name,       u.lr AS bert_self,       f.user_id,       u2.lr AS bert_friends FROM n_users u,     n_followers f,     n_users u2,	 facts_hashtags fh WHERE u.id = CAST (f.follows_ids AS bigint)  AND u2.id = f.user_id  AND u2.lr in ('links', 'rechts')  AND fh.user_id = u.id   AND fh.from_staging_table like '%{hashtag}%' ORDER BY follows_ids"
-    # refresh_score_in_DB(sql ,get_data_from_DB = True)
+    hashtag = 'le0711'
+    sql = f"SELECT distinct f.follows_ids,       u.screen_name,       u.lr AS bert_self,       f.user_id,       u2.lr AS bert_friends FROM n_users u,     n_followers f,     n_users u2,	 facts_hashtags fh WHERE u.id = CAST (f.follows_ids AS bigint)  AND u2.id = f.user_id  AND u2.lr in ('links', 'rechts')  AND fh.user_id = u.id   AND fh.from_staging_table like '%{hashtag}%' ORDER BY follows_ids"
+    refresh_score_in_DB(sql ,get_data_from_DB = True)
 
     #Calculates combined score from users self-LR score and users bert_friend score
     # sql = f"SELECT id,		   screen_name,		   lr,		   lr_conf,		   result_bert_friends,		   bert_friends_conf,		   bf_left_number,		   bf_right_number FROM n_users	WHERE (lr IS NOT NULL		   OR result_bert_friends IS NOT NULL)		   and combined_rating is null"
