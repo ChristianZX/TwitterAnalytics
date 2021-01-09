@@ -4,7 +4,9 @@ import db_functions
 import TwitterAPI
 from tqdm import tqdm
 
-def SN_get_tweet_ids_for_hashtag(since, until, hashtag):
+
+# TODO: documentation in English?
+def SN_get_tweet_ids_for_hashtag(since: str, until: str, hashtag: str) -> list:
     """
     Nutzt snScrape um die tweet IDs in einem Hashtag herunterzuladen
     :return: list of tweet_ids
@@ -20,7 +22,8 @@ def SN_get_tweet_ids_for_hashtag(since, until, hashtag):
     return cleaned_tweet_ids
 
 
-def SN_db_operations(hashtag, since: str, until: str):
+# TODO: describe return value in doc string
+def SN_db_operations(hashtag: str, since: str, until: str) -> tuple:
     """
     1. Creates staging table for new hashtag
     2. Calls tweet ID downloader
@@ -37,14 +40,17 @@ def SN_db_operations(hashtag, since: str, until: str):
     tweet_ids = SN_get_tweet_ids_for_hashtag(since, until, hashtag) #downloads tweets
     df = pd.DataFrame(tweet_ids)
 
+    # TODO: as the name is used three times, it would be good practice to save "update_temp" in a variable
     db_functions.df_to_sql(df, "update_temp", drop="replace") #Write Tweet ID to temp table
+    # TODO: table_name should already be a string?
     db_functions.update_table('insert into ' + str(table_name) + ' (id) select cast ("0" as bigint) from update_temp') #insert temp table content into staging table
     try:
         print(f"Table {table_name} created with {len(df)} tweets.")
     except:
-        print ("Unhandled Error")
+        print("Unhandled Error")
     db_functions.drop_table("update_temp")
     return table_name, hashtag, df.shape[0]
+
 
 def hashtag_download_launcher(hashtag, since: str, until: str):
     """
@@ -57,13 +63,16 @@ def hashtag_download_launcher(hashtag, since: str, until: str):
     :param until: until date for tweet download (string)
     :return: none
     """
+    # TODO: Use function parameters instead of hardcoded values
     table_name, hashtag, len_df = SN_db_operations('le0711', '2019-12-01', '2020-12-03')
-    print ("Hashtag Twitter ID download complete. Starting detail download.")
+    print("Hashtag Twitter ID download complete. Starting detail download.")
     bulk_size = 1000
     for i in tqdm(range(int(len_df / bulk_size + 1))):
         TwitterAPI.tweet_details_download_launcher(table_name, hashtag, bulk_size)
     print("Hashtag downloaded successfully.")
 
+
+# TODO: Is main still relevant?
 if __name__ == '__main__':
     #Downloads entire hashtag and saves it to DB in table s_h_HASHTAG_TIMESTAMP
     #hashtag_download_launcher(hashtag='le0711', since='2019-12-01', until='2020-12-03')
