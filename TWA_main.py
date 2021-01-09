@@ -127,7 +127,7 @@ def user_analyse_launcher(iterations, sql):
     db_functions.update_table(pre_update)
 
     TFIDF_pol_unpol_conv, Algo_pol_unpol = pickle_file_load_launcher()
-    BERT_model = inference_political_bert.init()
+    BERT_model = inference_political_bert.load_model()
 
     #Name of temp table in DB. Is deleted at the end of this function
     table_name = 'temp_result'
