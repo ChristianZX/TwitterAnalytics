@@ -4,10 +4,9 @@ import pandas as pd
 from langdetect import detect
 from langdetect.lang_detect_exception import LangDetectException
 import re
-
 from tqdm import tqdm
-
 import db_functions
+import TwitterAPI
 
 """common functions used by several files"""
 
@@ -45,7 +44,7 @@ def lang_detect(df: pd.DataFrame, update: bool) -> bool:
     :param df: Dataframe containing column Tweets
     :return:
     """
-    
+
     lang_list = []
     if isinstance(df, pd.DataFrame):
         for index, element in df.iterrows():
@@ -54,19 +53,19 @@ def lang_detect(df: pd.DataFrame, update: bool) -> bool:
             except LangDetectException as e:
                 if "No features in text" in str(e):
                     lang_list.append("no_lang")
-    
+
     if isinstance(df, str):
         try:
             lang_list.append(detect(df))
         except LangDetectException as e:
             if "No features in text" in str(e):
                 lang_list.append("no_lang")
-    
+
     result = collections.Counter(lang_list)
-    
+
     # TODO: the result of `result['de'] / len(lang_list)` should be saved in a variable,
     #  since otherwise the same operation is repeated four times
-    
+
     if result['de'] / len(lang_list) <= 0.50:  # checks if at least 50% of tweets are detected as german
         percent_not_german = int(100 - (100 / len(lang_list) * result['de']))
         print(f"{percent_not_german}% have been detected as non german. Account can't be evaluated meaningfully!")
@@ -74,10 +73,10 @@ def lang_detect(df: pd.DataFrame, update: bool) -> bool:
             return False  # german = False
         else:
             return True
-        
+
         # TODO: one-line alternative for the statement above
         return True if update else False
-    
+
     if result['de'] / len(lang_list) <= 0.75:  # checks if at least 75% of tweets are detected as german
         percent_not_german = int(100 - round((100 / len(lang_list) * result['de']), 1))
         print(f"{percent_not_german}% have been detected as non german. Risk of a wrong result is high!")
@@ -189,7 +188,7 @@ def interpolate_max(majority: list, number_of_predictions: int, min_boundary: in
 
     """
     interpolated_max = np.interp(majority, [min_boundary, max_boundary], [0, number_of_predictions])
-    conf = np.around(100 / number_of_predictions * interpolated_max, 2)
+    conf = np.around(100 / number_of_predictions * interpolated_max, 2)[0]
     return conf
 
 
@@ -219,10 +218,10 @@ def calculate_combined_score(bert_friends_high_confidence_capp_off, self_conf_hi
     count_bert_friends_result_is_mediocre = 0
     count_uncategorized_accounts = 0
     result = 0
-    
-    if self_lr == bert_friends_lr and self_lr in ['links', 'rechts']:
+
+    if self_lr == bert_friends_lr and self_lr in ['links', 'rechts'] and number_of_bert_friends_L + number_of_bert_friends_R >= min_required_bert_friend_opinions:
         # TODO: Simplify to min(self_lr_conf + bert_friends_lr_conf, 1)
-        new_conf = self_lr_conf + bert_friends_lr_conf
+        new_conf = self_lr_conf * 0.6 + bert_friends_lr_conf * 0.6
         if new_conf > 1:
             new_conf = 1
         result = [self_lr, new_conf]
@@ -238,7 +237,7 @@ def calculate_combined_score(bert_friends_high_confidence_capp_off, self_conf_hi
         # low
         elif self_lr_conf >= self_conf_high_conf_capp_off and (
                 bert_friends_lr_conf <= bert_friends_high_confidence_capp_off or number_of_bert_friends_L +
-                number_of_bert_friends_R <= min_required_bert_friend_opinions):
+                number_of_bert_friends_R < min_required_bert_friend_opinions):
             result = [self_lr, self_lr_conf]
             count_rated_accounts = 1
         elif self_lr_conf == 0 and bert_friends_lr_conf == 0:
@@ -276,7 +275,7 @@ def count_friend_stances(df: pd.DataFrame, friend_lst: list, column_to_count: st
     result_right_count_lst = []
     result_timestamp_lst = []
     timestamp = db_functions.staging_timestamp()
-    
+
     for element in tqdm(friend_lst):
         test = df[df.id == element]
         counted = test[column_to_count].value_counts()
@@ -293,12 +292,12 @@ def count_friend_stances(df: pd.DataFrame, friend_lst: list, column_to_count: st
             counted['rechts']
         except KeyError:  # no left friends
             counted['rechts'] = 0
-        
+
         counted_values = [counted.to_list()]
         # TODO: For readability, named counted_values[0][0]/[1]
         print(f"counted_values 0: {counted_values[0][0]}")
         print(f"counted_values 1: {counted_values[0][1]}")
-        
+
         if counted_values[0][0] + counted_values[0][1] >= min_required_bert_friend_opinions:
             text, conf = conf_value(method='LR', prediction_result=counted_values, min_boundary=0,
                                     max_boundary=counted_values[0][0] + counted_values[0][1])
@@ -311,15 +310,39 @@ def count_friend_stances(df: pd.DataFrame, friend_lst: list, column_to_count: st
         result_left_count_lst.append(counted_values[0][0])
         result_right_count_lst.append(counted_values[0][1])
         result_timestamp_lst.append(timestamp)
-    
+
     friend_series = pd.Series(friend_lst)
     result_conf_series = pd.Series(result_conf_lst)
     result_text_series = pd.Series(result_text_lst)
     result_left_count_series = pd.Series(result_left_count_lst)
     result_right_count_series = pd.Series(result_right_count_lst)
     result_timestamp_series = pd.Series(result_timestamp_lst)
-    
+
     df_result = pd.concat(
         [friend_series, result_text_series, result_conf_series, result_left_count_series, result_right_count_series,
          result_timestamp_series], axis=1)
     return df_result
+
+def add_more_eval_user_tweets():
+    table_name = 'eval_table'
+    #table_name = 'temp_table'
+
+    sql_left = "select distinct cast (fh.user_id as text) from facts_hashtags fh, n_users u where fh.user_id = u.id and combined_rating in ('links') and combined_conf >= 0.75 except select distinct user_id from eval_table limit 25"
+    df_left = db_functions.select_from_db(sql_left)
+
+    sql_right = "select distinct cast (fh.user_id as text) from facts_hashtags fh, n_users u where fh.user_id = u.id and combined_rating in ('rechts') and combined_conf >= 0.75 except select distinct user_id from eval_table limit 25"
+    df_right = db_functions.select_from_db(sql_right)
+    combined_lst = pd.concat([df_left['user_id'], df_right['user_id']]).to_list()
+
+    sql = "select * from (select * from ( select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.65 and combined_rating = 'links' and screen_name is not null and lr is not null limit 15 ) a except select distinct user_id as id from eval_table) a  union select * from (select * from (select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.65 and combined_rating = 'rechts' and screen_name is not null and lr is not null limit 15 ) a except select distinct user_id as id from eval_table) b union select * from (select * from (select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.70 and combined_rating = 'links' and screen_name is not null and lr is not null limit 15) a except select distinct user_id as id from eval_table) c union select * from (select * from (select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.70 and combined_rating = 'rechts' and screen_name is not null and lr is not null limit 15 ) a except select distinct user_id as id from eval_table) d"
+    combined_df = db_functions.select_from_db(sql)
+    combined_lst = combined_df.values.tolist()
+
+    for element in tqdm(combined_lst):
+        TwitterAPI.API_tweet_multitool(element[0], table_name, pages=1, method='user_timeline', append=True, write_to_db=True)
+
+    print ("Bing")
+
+if __name__ == "__main__":
+    add_more_eval_user_tweets()
+

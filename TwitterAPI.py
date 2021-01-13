@@ -45,10 +45,10 @@ def api_limit():
 #  use only one language, preferably English
 def API_Followers(screen_name: str, user_id: str):
     """
+    Downloads Follower using API. Stops after 1000 pages (5Mio Followers), no matter how many there are.
     :param screen_name: required (for SQL purpose)
     :param user_id: required
-    :param remaning: [optional]: Anzahl der Läufe, die ohne sleep durchgeführt werden. Remaining = 1 for auto modus
-    in which 1 minute sleep is used
+    :param remaning: [optional]: Anzahl der Läufe, die ohne sleep durchgeführt werden. Remaing = 1 for auto modus in which 1 minute sleep is used
     :return:
     """
 
@@ -58,6 +58,8 @@ def API_Followers(screen_name: str, user_id: str):
 
     try:
         for page in tweepy.Cursor(api.followers_ids, user_id=user_id).pages():
+            if count >= 5000:
+                break
             ids.extend(page)
             for index in enumerate(page["ids"]):
                 followers.append(page["ids"][index[0]])
@@ -85,7 +87,7 @@ def API_Followers(screen_name: str, user_id: str):
 
     connection = db_functions.db_connect()
     cursor = connection.cursor()
-    
+
     # TODO: Generalize into function with parameters for the SQL statement and wether v1 should be run
     if screen_name == 0:
         sql = "INSERT INTO public.n_followers(user_id, follows_users, follows_ids, retrieve_date) " \
@@ -190,6 +192,7 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
 
             if wait is True:
                 time.sleep(20)
+    # TODO: In case the error message is saved in variable e, print and return e?
     except TweepError as e:
         if "User not found" in str(e):
             return "Error: User not found"
@@ -241,7 +244,7 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
         print("Error: 0 Tweets")
         return "Error: 0 Tweets"
     #Write to DB or return result
-    
+
     if write_to_db is True:
         df = df.rename({'data-item-id': 'id', 'data-conversation-id': 'conversation_id', 'avatar': 'link'}, axis=1)
         # adds empty column to df
@@ -250,10 +253,10 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
         df['username'] = df['username'].str.replace("@", "")
 
         #engine, metadata = sql_alchemy_engine()  # gets SQL alchemy connection
-        
+
         # creates list that is as long das the DF and contains tablename in every entry.
         staging_column_list = [table_name for index in range(len(df))]
-        
+
         # appends staging_column_list to df
         df = df.assign(staging_name=pd.Series(staging_column_list).values)
         #db_functions.tweet_multitool_results_to_DB(df, table_name, append)
@@ -298,7 +301,7 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
     if len(df) == 0:
         return 0
     db_functions.df_to_sql(df, 'temp_df', 'replace')
-    
+
     #update staging table with values form temp_df
     sql = f"update {table_name} a set date = b.date, tweet = b.tweet, hashtags = b.hashtags, " \
           "user_id = cast (b.user_id as bigint), username = b.username, name = b.name, " \
@@ -350,7 +353,7 @@ def API_Friends(user_id: str, screen_name: str):
 
     #API call
     try:
-        for page in tweepy.Cursor(api.friends_ids, id = user_id).pages():
+        for page in tweepy.Cursor(api.friends_ids, user_id = user_id).pages():
             ids.extend(page)
             for index in enumerate(page["ids"]):
                 followers.append(page["ids"][index[0]])

@@ -16,7 +16,6 @@ import TwitterAPI
 import pickle
 import API_KEYS
 
-
 # v.1.0
 
 
@@ -92,12 +91,12 @@ def db_connect():
         cursor = connection.cursor()
         # Print PostgreSQL Connection properties
         # print ( connection.get_dsn_parameters(),"\n")
-        
+
         # Print PostgreSQL version
         cursor.execute("SELECT version();")
         # record = cursor.fetchone()
         # print("You are connected to - ", record,"\n")
-    
+
     except (Exception, psycopg2.Error) as error:
         print("Error while connecting to PostgreSQL", str(error))
         # TODO: Handle variable connection in case of error
@@ -127,7 +126,7 @@ def drop_table(name, engine=0, metadata=0):
     engine, metadata = sql_alchemy_engine()
     table_to_drop = Table(name, metadata)
     table_to_drop.drop(engine, checkfirst=True)
-    
+
     # df_5.to_sql('isert_test01', con=engine)  # writes df to Database using SQL alchemy engine
 
 
