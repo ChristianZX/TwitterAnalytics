@@ -1,27 +1,14 @@
-import warnings
-import re
-import math
 from datetime import datetime, timedelta
-from datetime import timezone
-import warnings
 import pandas as pd
 import pandas.io.sql as sqlio
 import psycopg2
-from decimal import Decimal, ROUND_UP
 from sqlalchemy import create_engine, Table, MetaData
 import sys
-from tqdm import tqdm
-import numpy as np
-import TwitterAPI
 import pickle
 import API_KEYS
 
-# v.1.0
 
-
-# TODO: Dynamically typed languages allow a value that can be either bool or string, but it's not very clean
-#  it would be better to make it a string but assign "None" as the default value and check "if not drop/if drop is None"
-def df_to_sql(df: pd.DataFrame, tablename: str, drop=False):
+def df_to_sql(df: pd.DataFrame, tablename: str, drop="none"):
     """
     Writes Dataframe to DB
     :param df: name of dataframe that will be written to DB
@@ -30,9 +17,9 @@ def df_to_sql(df: pd.DataFrame, tablename: str, drop=False):
     """
     engine, metadata = sql_alchemy_engine()
     if drop == "replace":
-        drop_table(tablename, engine, metadata)
+        drop_table(tablename)
         df.to_sql(tablename, con=engine)
-    elif drop == False:
+    elif drop == "none":
         df.to_sql(tablename, con=engine)
     elif drop == "append":
         df.to_sql(tablename, con=engine, index=False, if_exists='append')
@@ -40,8 +27,7 @@ def df_to_sql(df: pd.DataFrame, tablename: str, drop=False):
         print("Error raised by df_to_sql(): None of the write conditions (replace, drop, append) was met. "
               "Check function parameters!")
         sys.exit()
-    # TODO: Should probably be a function call?
-    engine.dispose
+    engine.dispose()
 
 
 def init_db_connections() -> tuple:
@@ -87,19 +73,17 @@ def db_connect():
     :return: psycopg2 connection
     """
     try:
-        connection = API_KEYS.connection_string
+        connection = psycopg2.connect(user="postgres",
+                                             password=API_KEYS.db_password,
+                                             host="127.0.0.1",
+                                             port="5433",
+                                             database="tw_lytics01")
+        #connection = API_KEYS.connection_string
         cursor = connection.cursor()
-        # Print PostgreSQL Connection properties
-        # print ( connection.get_dsn_parameters(),"\n")
-
-        # Print PostgreSQL version
         cursor.execute("SELECT version();")
-        # record = cursor.fetchone()
-        # print("You are connected to - ", record,"\n")
 
     except (Exception, psycopg2.Error) as error:
         print("Error while connecting to PostgreSQL", str(error))
-        # TODO: Handle variable connection in case of error
     return connection
 
 
@@ -107,8 +91,6 @@ def db_close(connection):
     try:
         # closing database connection.
         if connection:
-            # TODO: Variable cursor isn't defined
-            cursor.close()
             connection.close()
             print("PostgreSQL connection is closed")
     except:
@@ -116,8 +98,7 @@ def db_close(connection):
         # print ("It seems no DB connection not was open.")
 
 
-# TODO: Remove deprecated parameters
-def drop_table(name, engine=0, metadata=0):
+def drop_table(name):
     """
     :param name: Table name to be dropped
     :param engine: optional DB engine (to be removed in next version)
@@ -126,8 +107,6 @@ def drop_table(name, engine=0, metadata=0):
     engine, metadata = sql_alchemy_engine()
     table_to_drop = Table(name, metadata)
     table_to_drop.drop(engine, checkfirst=True)
-
-    # df_5.to_sql('isert_test01', con=engine)  # writes df to Database using SQL alchemy engine
 
 
 def select_from_db(sql) -> pd.DataFrame:
@@ -142,8 +121,12 @@ def select_from_db(sql) -> pd.DataFrame:
     return df
 
 
-# TODO: Missing docstring
 def update_table(sql):
+    """
+    Send Update Statement to DB. Can also be used to send inserts, create tables and so on.
+    :param sql: sql statement to be send to DB
+    :return: none
+    """
     connection = db_connect()
     cursor = connection.cursor()
     print(sql)
@@ -151,7 +134,7 @@ def update_table(sql):
     connection.commit()
     cursor.close()
     db_close(connection)
-    print("Update statement sent: " + sql)
+    print(f"Update statement sent: {sql}")
 
 
 def update_to_invalid(cur_date, user_id):
@@ -166,13 +149,21 @@ def update_to_invalid(cur_date, user_id):
     print(f"Set {user_id} to invalid")
 
 
-# TODO: Missing docstring
 def get_staging_table_name(table_name: str) -> str:
+    """
+    Adds prefix and suffix to table name. Example for hashtag le0711: s_h_le0711_20201128_2219
+    :param table_name: central name part of staging table
+    :return: table name with prefix and suffix
+    """
     return 's_h_' + table_name + '_' + str(staging_timestamp())
 
 
-# TODO: Missing docstring
 def create_empty_staging_table(table_name: str) -> None:
+    """
+    Creates empty table with staging table layout.
+    :param table_name: table name to be used in DB
+    :return: none
+    """
     sql = f'CREATE TABLE {table_name} (   index bigint,    id bigint,    conversation_id bigint,    created_at text ' \
           'COLLATE pg_catalog."default",    date text COLLATE pg_catalog."default",     tweet text COLLATE ' \
           'pg_catalog."default",    hashtags text COLLATE pg_catalog."default",    user_id bigint,    username text ' \
@@ -199,3 +190,39 @@ def load_pickle(filename: str):
     with open(filename, 'rb') as file:
         loaded_file = pickle.load(file)
     return loaded_file
+
+
+def insert_to_table_followers_or_friends(df, table_name, username):
+    """
+    Inserts new Followers into table n_followers
+    :param df: dataframe with new followers
+    :param table_name: Name of table to insert into. Structure works for n_followers and n_friends.
+    :param username: True if username is known, False if not
+    :return:
+    """
+    connection = db_connect()
+    cursor = connection.cursor()
+
+    if username is False:
+        sql = f"INSERT INTO {table_name}(user_id, follows_users, follows_ids, retrieve_date) " \
+              "VALUES (%s, %s, %s, %s);"
+        for index in range(len(df.index)):
+            v2 = int(df.iloc[index, 1])
+            v3 = (df.iloc[index, 2])
+            v4 = int(df.iloc[index, 3])
+            v5 = str(df.iloc[index, 4])
+            cursor.execute(sql, (v2, v3, v4, v5))
+            connection.commit()
+    else:
+        sql = f"INSERT INTO {table_name}(username, user_id, follows_users, follows_ids, retrieve_date) " \
+              "VALUES (%s, %s, %s, %s, %s);"
+        for index in range(len(df.index)):
+            v1 = (df.iloc[index, 0])
+            v2 = int(df.iloc[index, 1])
+            v3 = (df.iloc[index, 2])
+            v4 = int(df.iloc[index, 3])
+            v5 = str(df.iloc[index, 4])
+            cursor.execute(sql, (v1, v2, v3, v4, v5))
+            connection.commit()
+    cursor.close()
+    db_close(connection)

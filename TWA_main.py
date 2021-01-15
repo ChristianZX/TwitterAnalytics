@@ -14,13 +14,11 @@ import sys
 from helper_functions import calculate_combined_score, count_friend_stances
 
 
-# TODO: More precise summary of the function (what does it do? where does it get followers from? what does it do with
-#  them?)
 def get_followers(sql: str) -> None:
     """
-    Gets followers from a list retrieved from SQL DB. To retrieve only followers for one user, use API_Followers()
-    :param sql: SQL statement
-    :return:
+    Is given user ids in form of SQL statement. Will retrieve followers for this user from Twitter. To retrieve only followers for one user, use API_Followers()
+    :param sql: SQL statement containing followers
+    :return: none
     """
     # Block 1: Check Twitter Limits
     limit = TwitterAPI.api_limit()
@@ -31,7 +29,7 @@ def get_followers(sql: str) -> None:
     if limit == 0:
         print('Twitter API limit used up. Aborting query.')
         print("Reset Time: " + str(datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
-        # TODO: Prints "aborting query", but then continues normally?
+        sys.exit()
     else:
         print("Current API Follower Limit: " + str(limit))
 
@@ -41,11 +39,10 @@ def get_followers(sql: str) -> None:
     # Block 3: Get followers for each of the users retrieved in Block 2
     for index, element in tqdm(df.iterrows(), total=df.shape[0]):
         try:
-            # this option works if we loads followers for cores
+            # this option works if we load followers for cores
             id = element['user_id']
             screen_name = element['screen_name']
-        # TODO: More precise Exception (KeyError?)
-        except:
+        except KeyError:
             # this setting is used if we load follower for anything but cores
             id = element['id']
             screen_name = 0
@@ -66,15 +63,14 @@ def download_user_timelines():
     :return:
     """
 
-    # List Definition
-    # TODO: Why re-define the unpolitical_list variable?
+    # Tweets of below accounts will be downloaded from twitter. During model a subset of below accounts might be used.
     unpolitical_list = ['Podolski10', 'fckoeln', 'FCBayern', 'BVB', 'rtl2', 'DMAX_TV', 'tim_kocht', 'grandcheflafer',
                         'bildderfrau', 'gala', 'BUNTE', 'promiflash', 'funny_catvideos', 'BibisBeauty', 'dagibee',
                         'siggismallz', 'Gronkh', 'CHIP_online', 'COMPUTERWOCHE', 'SkySportNewsHD', 'MOpdenhoevel',
                         'kayefofficial', 'VOGUE_Germany', 'lucycatofficial', 'RealLexyRoxx', 'AnselmSchindler',
                         'pentru_tine', 'KaJa80028344']
 
-    unpolitical_list = ['Podolski10']
+    #unpolitical_list = ['Podolski10'] For Testing
 
     political_list = ['Thomas_Ehrhorn', 'HilseMdb', 'DirkSpaniel', 'MdB_Lucassen', 'RolandTichy', 'UllmannMdB',
                       'c_jung77', 'michael_g_link', 'theliberalfrank', 'IreneMihalic', 'KaiGehring', 'RenateKuenast',
@@ -91,43 +87,25 @@ def download_user_timelines():
     right_wing_populists_list = ['Junge_Freiheit', 'zaferflocken', 'HelmutWachler', 'M_Briefing', 'TinVonWo', 'mcwd12',
                                  'EBlume3', 'h_hendrich']
 
-    # List Download
-    # TODO: more elegant and short variation would be to create a dictionary instead of four lists
-    #  make the dictionary keys the name of the list (f.i. "unpolitical_list")
-    #  and have only one loop:
-    #  for list_name, username_list in user_lists.items():
-    #      for element in username_list:
-    #          TwitterAPI.API_tweet_multitool(element, list_name, pages=10, method='user_timeline',
-    #          append=True, write_to_db=True)
+    #List Download
+    user_lists = {'unpolitical_list': unpolitical_list,
+                  'political_list': political_list,
+                  'political_moderate_list': political_moderate_list,
+                  'right_wing_populists_list': right_wing_populists_list}
 
-    for element in unpolitical_list:
-        TwitterAPI.API_tweet_multitool(element, "unpolitical_list", pages=10, method='user_timeline', append=True,
-                                       write_to_db=True)
-
-    for element in political_list:
-        TwitterAPI.API_tweet_multitool(element, "political_list", pages=10, method='user_timeline', append=True,
-                                       write_to_db=True)
-
-    for element in political_moderate_list:
-        TwitterAPI.API_tweet_multitool(element, "political_moderate_list", pages=10, method='user_timeline',
-                                       append=True, write_to_db=True)
-
-    for element in right_wing_populists_list:
-        TwitterAPI.API_tweet_multitool(element, "right_wing_populists_list", pages=10, method='user_timeline',
-                                       append=True, write_to_db=True)
+    for list_name, username_list in user_lists.items():
+        for element in username_list:
+            TwitterAPI.API_tweet_multitool(element, list_name, pages=10, method='user_timeline',
+            append=True, write_to_db=True)
 
 
-# TODO: Add parameters for file paths/names for better parametrization
-def pickle_file_load_launcher():
+def pickle_file_load_launcher(TFIDF_pol_unpol_conv, Algorithm_pol_unpol):
     """
     Loads two files from pickle:
-        1) TFIDF converter
-        2) Random Forest model for Political / Unpolitical prediction
+    :param TFIDF_pol_unpol_conv: TFIDF converter
+    :param Algorithm_pol_unpol: Random Forest model for Political / Unpolitical prediction
     :return: TFIDF converter, Random Forest Model
     """
-    TFIDF_pol_unpol_conv = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_TFIDF_5k_SGD.pkl"  # SGD for Website
-    Algorithm_pol_unpol = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_SGD_5k.pkl"  # SGD for Website
-
     TFIDF_pol_unpol_conv, Algo_pol_unpol = TFIDF_inference.load_models(TFIDF_pol_unpol_conv, Algorithm_pol_unpol)
     return TFIDF_pol_unpol_conv, Algo_pol_unpol
 
@@ -148,10 +126,12 @@ def user_analyse_launcher(iterations: int, sql: str) -> None:
     pre_update = "insert into n_users (id) select distinct user_id from facts_hashtags except select id from n_users"
     db_functions.update_table(pre_update)
 
-    # TODO: add paths of pickle files once function has new parameters for file paths
-    TFIDF_pol_unpol_conv, Algo_pol_unpol = pickle_file_load_launcher()
-    # TODO: add model_name parameter (named of pretrained model or checkpoint path)
-    BERT_model = inference_political_bert.load_model()
+    TFIDF_pol_unpol_conv_path = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_TFIDF_5k_SGD.pkl"  # SGD for Website
+    Algorithm_pol_unpol_path = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_SGD_5k.pkl"  # SGD for Website
+    model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+
+    TFIDF_pol_unpol_conv, Algo_pol_unpol = pickle_file_load_launcher(TFIDF_pol_unpol_conv_path, Algorithm_pol_unpol_path)
+    BERT_model = inference_political_bert.load_model(model_path)
 
     # Name of temp table in DB. Is deleted at the end of this function
     table_name = 'temp_result'
@@ -169,19 +149,20 @@ def user_analyse_launcher(iterations: int, sql: str) -> None:
         gc.collect()
 
 
-# TODO: Add missing parameters to docstring, translate docstring to English, add missing type hints
 def prediction_launcher(table_name: str, TFIDF_pol_unpol_conv, Algo_pol_unpol, BERT_model, sql: str,
                         write_to_db: bool = True):
     """
-    lädt 200 tweets pro angegebenen screen_name herunter und schickt sie zum BERT
-    :param write_to_db True or False
+    Loads 200 Tweets (one page call) per users and sends them to BERT for inference
     :param table_name: Name of temp table used to store results
+    :param TFIDF_pol_unpol_conv: tfidf converter
+    :param Algo_pol_unpol: Random Forrest classifier
+    :param BERT_model: BERT Model
+    :param sql: Statement providing Users to be inferenced
+    :param write_to_db: True or False
     :return:
     """
-
     start_time_overal = time.time()
     cur_date = str(date.today())  # date for last seen columns
-
     methods = ['pol', 'LR']
     data = []
 
@@ -195,7 +176,6 @@ def prediction_launcher(table_name: str, TFIDF_pol_unpol_conv, Algo_pol_unpol, B
     print(f"##############  --- SQL Select time : {sql_time_start - time.time()} --- #############")
     if df.shape[1] != 2:
         print("ERROR: DF must ONLY have columns user_id and username")
-        # TODO: WHen exiting the program, there's no need to call the garbage collector
         gc.collect()
         sys.exit()
     gc.collect()
@@ -220,16 +200,8 @@ def prediction_launcher(table_name: str, TFIDF_pol_unpol_conv, Algo_pol_unpol, B
 
         for method in methods:
             prediction_result = []
-            if method == "pol":
-                # TODO: Why reset/rename these variables? They don't seem to be used anywhere else
-                algo = Algo_pol_unpol
-                tfidf = TFIDF_pol_unpol_conv
-                # TODO: Why a separate/duplicate if statement below? The prediction result could be appended here
-
             if method == 'pol':
-                prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], tfidf, algo))
-
-            # TODO: Could use "else" instead of another "if", as method can only be pol or LR
+                prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], TFIDF_pol_unpol_conv, Algo_pol_unpol))
             if method == 'LR':
                 prediction_result.append(inference_political_bert.bert_predictions(df_tweets['tweet'], BERT_model))
             runtime = int(time.time() - start_time)
@@ -244,6 +216,11 @@ def prediction_launcher(table_name: str, TFIDF_pol_unpol_conv, Algo_pol_unpol, B
 
             # TODO: If you store the column names in variables that update depending on the method, you only need
             #  one block
+            pred_result_zero = 'left' if method == "LR" else 'pol'
+            pred_result_one = 'right' if method == "LR" else 'unpol'
+            df_pred_data.at[index, pred_result_zero] = prediction_result[0][0]
+            df_pred_data.at[index, pred_result_one] = prediction_result[0][1]
+
             if method == "LR":
                 df_pred_data.at[index, 'left'] = prediction_result[0][0]
                 df_pred_data.at[index, 'right'] = prediction_result[0][1]
@@ -290,7 +267,6 @@ def get_friends(sql: str):
         number_written = TwitterAPI.API_Friends(element[0], "unknown")
         print(str(number_written) + " friends written to table n_friends for id " + str(element))
         time.sleep(60)  # Avoids exceeding Twitter API rate limit
-        # TODO: Profile runtime at some point, the frequent calls to the garbage collector might slow the program down
         gc.collect()  # API calls seem to be memory leaky
 
 
@@ -321,17 +297,16 @@ def refresh_score_in_DB(sql: str, get_data_from_DB: bool) -> None:
     del df
 
     user_list = result.index.to_list()
-    # TODO: German variable names a re bad practice
-    links_friend_Bert_list = result['links_friend_Bert'].to_list()
-    rechts_friend_Bert_list = result['rechts_friend_Bert'].to_list()
+    left_friend_Bert_list = result['links_friend_Bert'].to_list()
+    right_friend_Bert_list = result['rechts_friend_Bert'].to_list()
     del result
 
     user_dict = {}
     for i, user in enumerate(tqdm(user_list)):
         if user not in user_dict:
             user_dict[user] = {}
-        right = rechts_friend_Bert_list[i]
-        left = links_friend_Bert_list[i]
+        right = right_friend_Bert_list[i]
+        left = left_friend_Bert_list[i]
         text, conf = helper_functions.interpret_stance("LR", left, right)
         user_dict[user]["text"] = text
         user_dict[user]["confidence"] = conf
@@ -341,16 +316,15 @@ def refresh_score_in_DB(sql: str, get_data_from_DB: bool) -> None:
 
     result = pd.DataFrame(user_dict).T
     db_functions.df_to_sql(result, "temp_result", drop='replace')
-    # TODO: SQL is unused, delete/define conditions under which it is used?
     sql = "update n_users set result_bert_friends = text, bert_friends_conf = cast(confidence as numeric), " \
           "bert_friends_last_seen = temp_result.last_seen, bf_left_number = temp_result.bf_left_number, " \
           "bf_right_number = temp_result.bf_right_number from temp_result where id = cast (temp_result.index as bigint)"
-    # db_functions.update_table(sql)
+    db_functions.update_table(sql)
     db_functions.drop_table("temp_result")
     print(f"Runtime in  min: {(time.time() - start_time) / 60} ")
 
 
-def get_combined_scores_from_followers(sql: str):
+def combined_scores_calc_launcher(sql: str, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off, min_required_bert_friend_opinions):
     """
     Calculates combined score from users self-LR score and users bert_friend score
     :return:
@@ -362,18 +336,12 @@ def get_combined_scores_from_followers(sql: str):
     # bf_right_number from n_users where lr is not null or result_bert_friends is not null"
     df = db_functions.select_from_db(sql)
     df.fillna(0, inplace=True)
-    # TODO: Fore brevity, multiple empty lists could be instantiated in one line
+
     count_rated_accounts = 0
     count_uncategorized_accounts = 0
     count_rating_less_accounts = 0
     count_to_few_bert_friends_to_rate_and_LRself_is_invalid = 0
     count_bert_friends_result_is_mediocre = 0
-
-    # TODO: These caps should probably be defined in a config file in a future version (and thus become parameters
-    #  of this function)
-    bert_friends_high_confidence_capp_off = 0.70
-    self_conf_high_conf_capp_off = 0.70
-    min_required_bert_friend_opinions = 10
 
     id_list = df['id'].to_list()
     id_dict = {i: 0 for i in id_list}
@@ -400,9 +368,6 @@ def get_combined_scores_from_followers(sql: str):
         count_bert_friends_result_is_mediocre += bert_friends_result_is_mediocre
         count_uncategorized_accounts += uncategorized_accounts
 
-    # TODO: Hide this block in a print function to make this function more concise?
-    # TODO: Calculate accounts without rating in a variable before the print statement so 1) you can respect PEP8 and 2)
-    #  the print statement is more readable?
     print("\n\n")
     print(f"ratingless_accounts: {count_rating_less_accounts}")
     print(
@@ -410,9 +375,11 @@ def get_combined_scores_from_followers(sql: str):
         f"{count_to_few_bert_friends_to_rate_and_LRself_is_invalid}")
     print(f"bert_friends_result_is_medicore: {count_bert_friends_result_is_mediocre}")
     print(f"uncategorized_accounts: {count_uncategorized_accounts}")
-    print(
-        f"\nAccounts without rating: "
-        f"{count_rating_less_accounts + count_to_few_bert_friends_to_rate_and_LRself_is_invalid + count_bert_friends_result_is_mediocre + count_uncategorized_accounts}")
+    total_rating_less_accounts = count_rating_less_accounts + \
+                                 count_to_few_bert_friends_to_rate_and_LRself_is_invalid + \
+                                 count_bert_friends_result_is_mediocre + \
+                                 count_uncategorized_accounts
+    print(f"\nAccounts without rating: {total_rating_less_accounts}")
     print(f"Rated accounts: {count_rated_accounts}")
     print("\n\n")
     print("Calculation done. Writing result to DB.")
@@ -430,7 +397,7 @@ def get_combined_scores_from_followers(sql: str):
         db_functions.drop_table("temp_table")
 
 
-def get_BERT_friends_scores_from_friends(sql: str):
+def get_BERT_friends_scores_from_friends(sql: str, min_required_bert_friend_opinions: int):
     """
     Counts how many left or right friends a user has. Unlike seemingly similar functions (which download and analyse
     tweets), this one gets user profiles from DB as DF.
@@ -443,8 +410,6 @@ def get_BERT_friends_scores_from_friends(sql: str):
     score
     """
     df = db_functions.select_from_db(sql)
-    # TODO: would be a sensible function parameter
-    min_required_bert_friend_opinions = 10
 
     # Accounts in this list can only rated via bert_friend_rating
     bert_friend_rating_list = df[df['combined_conf'].isnull()]['id'].drop_duplicates().to_list()
@@ -470,8 +435,6 @@ def get_BERT_friends_scores_from_friends(sql: str):
 
     df_combined = pd.concat([df_result_BERT_friends, df_result_combined_ratings])
     df_combined.dropna(inplace=True)
-
-    # TODO: Is del necessary here? They go out of scope 5 lines later
     del df
     del df_result_combined_ratings
     del df_result_BERT_friends
@@ -485,15 +448,19 @@ def get_BERT_friends_scores_from_friends(sql: str):
 
 
 if __name__ == '__main__':
-    # TODO: Move setup to separate function
     ###setup (not recurring)
 
     #Provide User_Id of followers you want to download in to table n_followers
     #sql = "select u.id from n_users u where cast (u.followers_count as bigint) >= 10000 and u.id not in (select distinct user_id from n_followers) and u.id not in (select distinct user_id from n_friends) and (u.location like '%Deutschland%' or u.location like '%Germany%')"
     #sql = "select u.id from n_users u where u.id = 760366485713879040" #refac test
     #User ID of Big Accounts, that have more then 500 followers among hashtag users
-    #sql = "select follows_ids as id from (		select fr.follows_ids, count(fr.follows_ids)		from facts_hashtags f, n_friends fr 		where from_staging_table like '%le0711%'		and f.user_id = fr.user_id		group by fr.follows_ids 		having count(fr.follows_ids) >= 500		order by count(fr.follows_ids) desc 		) a	except 	select cast (user_id as text) from n_followers"
+    #hashtag = 'le0711'
+    #sql = "select follows_ids as id from (		select fr.follows_ids, count(fr.follows_ids)		from facts_hashtags f, n_friends fr 		where from_staging_table like '%{hashtag}%'		and f.user_id = fr.user_id		group by fr.follows_ids 		having count(fr.follows_ids) >= 500		order by count(fr.follows_ids) desc 		) a	except 	select cast (user_id as text) from n_followers"
     #get_followers(sql)
+
+    # copy new users from n_followers to n_users
+    # sql = "insert into n_users (id) select distinct user_id from n_followers except select id from n_users"
+    # db_functions.update_table(sql)
 
     #Downloads timelines for users configured in function. Used as traning material for AI
     #download_user_timelines()
@@ -506,10 +473,6 @@ if __name__ == '__main__':
 
     #evaluation based on accounts in table eval_table
     #inference_political_bert.eval_bert()
-
-    #copy new users from n_followers to n_users
-    # sql = "insert into n_users (id) select distinct user_id from n_followers except select id from n_users"
-    # db_functions.update_table(sql)
 
     # Give LR ratings to accounts with many followers (Bert inference for big users who have not yet a self Bert score)
     # sql = "select distinct id as user_id, screen_name as username from n_followers fo, n_users u where fo.user_id = u.id and lr is null"
@@ -525,24 +488,23 @@ if __name__ == '__main__':
     # sql = "select f.follows_ids, u.screen_name, u.lr as bert_self, f.user_id, u2.lr  as bert_friends from n_users u, n_followers f, n_users u2 where u.id = cast (f.follows_ids as bigint) and u2.id = f.user_id and u2.lr in ('links','rechts') order by follows_ids"
     # refresh_score_in_DB(sql ,get_data_from_DB = True)
 
-    # TODO: Move hashtag download to separate function
     ###New hashtag download (recurring)
     # Downloads entire hashtag and saves it to DB in table s_h_HASHTAG_TIMESTAMP
     # sn_scrape.hashtag_download_launcher(hashtag='le0711', since='2019-12-01', until='2020-12-03')
 
     #Download friends of hashtag users, unless we already have their friends
-    #sql = "select f.user_id from facts_hashtags f where from_staging_table like '%le0711%' except select distinct f.user_id from facts_hashtags f, n_friends fr where from_staging_table like '%le0711%' and f.user_id = fr.user_id"
+    #sql = f"SELECT distinct f.user_id FROM facts_hashtags f left join n_friends fr on f.user_id = fr.user_id left join n_users u on f.user_id = u.id WHERE from_staging_table like '%{hashtag}%' and fr.user_id is null and u.private_profile is null"
     #get_friends(sql)
 
     #Give Bert LR-self rating to all new users in hashtag
     #The LR-self rating is based on the users tweets
-    hashtag = 'le0711'
+    #hashtag = 'le0711'
     #hashtag = 'b2908'
     # sql = f"SELECT DISTINCT u.id AS user_id, screen_name AS username FROM n_users u, (SELECT follows_ids, COUNT (follows_ids) FROM n_followers f GROUP BY follows_ids HAVING COUNT (follows_ids) >= 100) a ,facts_hashtags fh WHERE CAST (a.follows_ids AS bigint) = u.id AND lr IS NULL AND fh.user_id = u.id AND fh.from_staging_table like '%{hashtag}%' LIMIT 200"
     # user_analyse_launcher(iterations=1, sql=sql)
     # Overwrite / Refresh LR-self rating for all users of a hashtag
-    sql = f"select distinct u.id AS user_id, screen_name AS username  from facts_hashtags f, n_users u where f.hashtags = '{hashtag}' and f.user_id = u.id and u.lr is null"
-    user_analyse_launcher(iterations= 1, sql=sql)
+    #sql = f"select distinct u.id AS user_id, screen_name AS username  from facts_hashtags f, n_users u where f.hashtags = '{hashtag}' and f.user_id = u.id and u.lr is null"
+    #user_analyse_launcher(iterations= 1, sql=sql)
 
     #Refreshes LR-friend rating for all users in hashtag who have a Bert LR rating and follow someone in n_followers
     #The LR-friend rating is based on the LR-self rating of account a user follows
@@ -553,30 +515,33 @@ if __name__ == '__main__':
 
     #Calculates combined score from users self-LR score and users bert_friend score
     #all users
+    bert_friends_high_confidence_capp_off = 0.70
+    self_conf_high_conf_capp_off = 0.70
+    min_required_bert_friend_opinions = 10
     sql = f"SELECT id,		   screen_name,		   lr,		   lr_conf,		   result_bert_friends,		   bert_friends_conf,		   bf_left_number,		   bf_right_number FROM n_users	WHERE (lr IS NOT NULL		   OR result_bert_friends IS NOT NULL)		   and combined_rating is null"
     #hashtag only
     #hashtag = 'le0711'
     #hashtag = 'b2908'
     #sql = f"SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number FROM n_users WHERE (lr IS NOT NULL        OR result_bert_friends IS NOT NULL)   AND combined_rating IS NULL  and id in (select distinct f.user_id from facts_hashtags f where from_staging_table like '%{hashtag}%')"
     #test_sql = "SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number  from n_users where id = 843210563190771713"
-    get_combined_scores_from_followers(sql)
+    combined_scores_calc_launcher(sql, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off, min_required_bert_friend_opinions)
 
     #Counts how many left or right friends a user has. Unlike seamingly similar functions (who download and analyse tweets),
     #this one gets user profiles from DB as DF.
     #For users that need special attention because they did not get a combined score due to bad BERT_friend score.
-    hashtag = 'le0711'
+    #hashtag = 'le0711'
     #hashtag = 'b2908'
     #conf_level = 0.70
-    conf_level = 0.00
-    sql = f"select distinct u.id, u2.id as friend_id, u2.lr, u2.lr_conf, u2.result_bert_friends, u2.bert_friends_conf, u2.bf_left_number, u2.bf_right_number,u2.combined_rating, u2.combined_conf from facts_hashtags f, n_users u, n_friends fr, n_users u2 where from_staging_table like '%{hashtag}%' and f.user_id = fr.user_id and fr.user_id = u.id and cast (fr.follows_ids as numeric) = u2.id and u.combined_rating is null and u2.result_bert_friends in ('links','rechts') and u2.bert_friends_conf >= {conf_level} order by u.id"
-    # get_BERT_friends_scores_from_friends(sql)
+    #min_required_bert_friend_opinions = 10
+    #sql = f"select distinct u.id, u2.id as friend_id, u2.lr, u2.lr_conf, u2.result_bert_friends, u2.bert_friends_conf, u2.bf_left_number, u2.bf_right_number,u2.combined_rating, u2.combined_conf from facts_hashtags f, n_users u, n_friends fr, n_users u2 where from_staging_table like '%{hashtag}%' and f.user_id = fr.user_id and fr.user_id = u.id and cast (fr.follows_ids as numeric) = u2.id and u.combined_rating is null and u2.result_bert_friends in ('links','rechts') and u2.bert_friends_conf >= {conf_level} order by u.id"
+    #get_BERT_friends_scores_from_friends(sql, min_required_bert_friend_opinions)
 
-    hashtag = 'le0711'
+    #hashtag = 'le0711'
     #hashtag = 'b2908'
-    sql = f"SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number FROM n_users WHERE (lr IS NOT NULL        OR result_bert_friends IS NOT NULL)   AND combined_rating IS NULL  and id in (select distinct f.user_id from facts_hashtags f where from_staging_table like '%{hashtag}%')"
-    get_combined_scores_from_followers(sql)
+    #sql = f"SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number FROM n_users WHERE (lr IS NOT NULL        OR result_bert_friends IS NOT NULL)   AND combined_rating IS NULL  and id in (select distinct f.user_id from facts_hashtags f where from_staging_table like '%{hashtag}%')"
+    #get_combined_scores_from_followers(sql)
 
-    hashtag = 'le0711'
+    #hashtag = 'le0711'
     #hashtag = 'b2908'
-    sql = f"select count (distinct u.id) from facts_hashtags f, n_users u where from_staging_table like '%{hashtag}%' and f.user_id = u.id and combined_rating in ('links','rechts')"
-    print (db_functions.select_from_db(sql))
+    #sql = f"select count (distinct u.id) from facts_hashtags f, n_users u where from_staging_table like '%{hashtag}%' and f.user_id = u.id and combined_rating in ('links','rechts')"
+    #print (db_functions.select_from_db(sql))

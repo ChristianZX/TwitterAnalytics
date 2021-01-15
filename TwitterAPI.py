@@ -2,21 +2,10 @@ import time
 from datetime import datetime, timedelta
 import tweepy
 import pandas as pd
-import numpy as np
-import json
-from tweepy.streaming import StreamListener
 from tweepy import OAuthHandler, TweepError
-from sqlalchemy.sql import table, column, select, update, insert
-from tweepy import Stream
-import json
-import gc
-import API_KEYS
-import db_functions
 import API_KEYS
 import db_functions
 
-# TODO: Add API_KEYS.py file with variable names but not values, so that a new user could simply enter her
-#  API key and run the program
 API_KEY = API_KEYS.API_KEY
 API_KEY_Secret = API_KEYS.API_KEY_Secret
 ACCESS_TOKEN = API_KEYS.ACCESS_TOKEN
@@ -30,26 +19,30 @@ auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth, parser=tweepy.parsers.JSONParser())
 
 
-# TODO: Remove old code?
 def api_limit():
+    """
+    Retrieves current API Limit from Twitter
+    Commonly used API Limit Examples below:
+    print (limit['resources']['followers']['/followers/ids'])
+    print (limit['resources']['friends']['/friends/ids'])
+    print ("['resources']['users']['/users/:id']: " + str(limit['resources']['users']['/users/:id']))
+    print ("['resources']['statuses']['/statuses/show/:id']: " + str(limit['resources']['statuses']['/statuses/show/:id']))
+    print ("['resources']['statuses']['/statuses/user_timeline']: " + str(limit['resources']['statuses']['/statuses/user_timeline']))
+    :return:
+    """
     limit = api.rate_limit_status()
-    #print (limit['resources']['followers']['/followers/ids'])
-    #print (limit['resources']['friends']['/friends/ids'])
-    #print ("['resources']['users']['/users/:id']: " + str(limit['resources']['users']['/users/:id']))
-    #print ("['resources']['statuses']['/statuses/show/:id']: " + str(limit['resources']['statuses']['/statuses/show/:id']))
-    #print ("['resources']['statuses']['/statuses/user_timeline']: " + str(limit['resources']['statuses']['/statuses/user_timeline']))
     return limit
 
 
-# TODO: Update doc string (doesn't describe used parameters, describes an old one)
-#  use only one language, preferably English
-def API_Followers(screen_name: str, user_id: str):
+
+def API_Followers(screen_name: str, user_id: str, limit=12500000):
     """
     Downloads Follower using API. Stops after 1000 pages (5Mio Followers), no matter how many there are.
-    :param screen_name: required (for SQL purpose)
-    :param user_id: required
-    :param remaning: [optional]: Anzahl der Läufe, die ohne sleep durchgeführt werden. Remaing = 1 for auto modus in which 1 minute sleep is used
-    :return:
+    :param screen_name: Twitter screen_name. Technically not required but added to DB for convenient lockup
+    :param user_id: Twitter User_ID
+    :param limit: #prevents download of more than 12,5 Million Followers of a user. Accounts with that
+    many Followers are mostly non german and their followers not relevant enough to justify the download time.
+    :return: none
     """
 
     ids = []
@@ -58,16 +51,14 @@ def API_Followers(screen_name: str, user_id: str):
 
     try:
         for page in tweepy.Cursor(api.followers_ids, user_id=user_id).pages():
-            if count >= 5000:
-                break
             ids.extend(page)
             for index in enumerate(page["ids"]):
                 followers.append(page["ids"][index[0]])
                 count += 1
             time.sleep(60)
-            # TODO: Is screen_name not a string?
             print("Scraping " + str(screen_name) + "Current Follower Count:" + str(len(followers)))
-            #print("Lates scraping target: " + str(screen_name) + " | Current follower count: " + str(count))
+            if count >= limit:
+                break
     except TweepError as e:
         if "Not authorized" in str(e):
             print("Error: Not authorized. | Followers possibly set to private")
@@ -85,35 +76,8 @@ def API_Followers(screen_name: str, user_id: str):
                        'retrieve_date': pd.Series(timestamp)
                        })
 
-    connection = db_functions.db_connect()
-    cursor = connection.cursor()
+    db_functions.insert_to_table_followers_or_friends(df, table_name = 'n_followers', username = False)
 
-    # TODO: Generalize into function with parameters for the SQL statement and wether v1 should be run
-    if screen_name == 0:
-        sql = "INSERT INTO public.n_followers(user_id, follows_users, follows_ids, retrieve_date) " \
-              "VALUES (%s, %s, %s, %s);"
-        for index in range(len(df.index)):
-            v2 = int(df.iloc[index, 1])
-            v3 = (df.iloc[index, 2])
-            v4 = int(df.iloc[index, 3])
-            v5 = str(df.iloc[index, 4])
-            cursor.execute(sql, (v2, v3, v4, v5))
-            connection.commit()
-    else:
-        sql = "INSERT INTO public.n_followers(username, user_id, follows_users, follows_ids, retrieve_date) " \
-              "VALUES (%s, %s, %s, %s, %s);"
-        for index in range(len(df.index)):
-            v1 = (df.iloc[index, 0])
-            v2 = int(df.iloc[index, 1])
-            v3 = (df.iloc[index, 2])
-            v4 = int(df.iloc[index, 3])
-            v5 = str(df.iloc[index, 4])
-            cursor.execute(sql, (v1, v2, v3, v4, v5))
-            connection.commit()
-        cursor.close()
-    db_functions.db_close(connection)
-    print(str(len(df.index)) + " followers written to table n_followers" )
-    gc.collect()
 
 
 def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, append: bool = False,
@@ -137,8 +101,6 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
     #deactivates JSON which is required for api search cursor call
     api = tweepy.API(auth)
 
-    # TODO: Multiple empty lists can be instantiated in one line, f.i. id, conversation_id = [], []
-    #  or leave it be and construct a dictionary instead for easier dataframe creation (see below)
     id = []
     conversation_id = []
     created_at = []
@@ -157,6 +119,7 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
     user_rt_id = []
     user_rt = []
 
+
     #api_method = api.search if method == "search" else api.user_timeline
     if method == 'search':
         api_method = api.search
@@ -164,7 +127,8 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
     elif method == 'user_timeline':
         api_method = api.user_timeline
         wait = False
-    # TODO: Handle case where neither is True
+    else:
+        assert (method == 'search' or method == 'user_timeline' ), "Error: No known method given!"
 
     try:
         for fetched_tweets in tweepy.Cursor(api_method, query, count=count, tweet_mode='extended').pages(pages):
@@ -209,10 +173,6 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
             print(e)
             return ("Error")
 
-    # TODO: It would probably be shorter to construct the DataFrame via a dict
-    #  to do this, define a dictionary with string keys and empty lists as values (instead of multiple lists)
-    #  append to the lists in the dictionary
-    #  convert the dictionary to a dataframe
     # Build Dataframe
     id = pd.Series(id, name='id')
     conversation_id = pd.Series(conversation_id, name='conversation_id')
@@ -236,15 +196,12 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
         [id, conversation_id, created_at, date, tweet, hashtags, user_id, username, name, link, retweet, nlikes,
          nreplies, nretweets, quote_url, user_rt_id, user_rt], axis=1)
 
-    # TODO: is this still relevant?
-    # if isinstance(df, pd.Series):
-    #     print ("Error: 0 Tweets")
-    #     return "Error: 0 Tweets"
+
     if df.shape[0] == 0:
         print("Error: 0 Tweets")
         return "Error: 0 Tweets"
-    #Write to DB or return result
 
+    #Write to DB or return result
     if write_to_db is True:
         df = df.rename({'data-item-id': 'id', 'data-conversation-id': 'conversation_id', 'avatar': 'link'}, axis=1)
         # adds empty column to df
@@ -261,7 +218,6 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
         df = df.assign(staging_name=pd.Series(staging_column_list).values)
         #db_functions.tweet_multitool_results_to_DB(df, table_name, append)
         db_functions.df_to_sql(df, table_name, drop = 'append')
-        # TODO: Isn't table name already a string?
         print("Staging Table " + str(table_name) + " created with " + str(len(df)) + " entries.")
     else:
         return df
@@ -311,12 +267,12 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
     db_functions.drop_table('temp_df')
 
 
-# TODO: Parameter sleep is missing from docstring
 def API_get_tweet_details(tweet_id: str, sleep: bool = True):
     """
     Downloads details for single Tweet ID and returns Tweet details
     Limit Info: print(limit['resources']['statuses']['/statuses/show/:id'])
     :param tweet_id:
+    :param sleep: True: Waits 0.75s to be compliant with API rate limit, False: Doesn't wait. Used for Testing only.
     :return: user_id, date, tweet text, user_name, screen_name, in_reply_to_status_id, in_reply_to_user_id, in_reply_to_screen_name_id
     """
     if sleep is True:
@@ -325,7 +281,7 @@ def API_get_tweet_details(tweet_id: str, sleep: bool = True):
         tweet = api.get_status(tweet_id)
     except TweepError as e:
         if "Not authorized" in str(e):
-            # TODO: Technically, it would be cleaner to define the text in a variable since you use it twice
+            # TODO: It would be cleaner to define the text in a variable since you use it twice
             #  or just print and return e? At this point, why are "not authorized" and "not found" handled differently?
             print("Error: Not authorized")
             return "Error: Not authorized"
@@ -368,13 +324,13 @@ def API_Friends(user_id: str, screen_name: str):
 
     #Sets user to private in DB, if tweets are not public. Avoids pulling the users another time in future
     if len(user_id_list) == 0:
-        update_sql = "update n_followers set private = 1 where follows_ids = '" + str(user_id) + "'"
+        update_sql = f"update n_users set private_profile = True where id = {user_id}"
         db_functions.update_table(update_sql)
         return 0
 
     result_user = ["" for element in followers]
     timestamp = [datetime.now().strftime("%Y%m%d_%H%M%S") for element in followers]
-    # TODO: Maybe test this, but the conversion to Series is likely unnecessary. A dict of lists should work just fine.
+    # TODO: Test if a dict of lists works here to. Instead of series.
     df = pd.DataFrame({'username': pd.Series(username_list),
                        'user_id': pd.Series(user_id_list),
                        'fav_users': pd.Series(result_user),
@@ -382,20 +338,6 @@ def API_Friends(user_id: str, screen_name: str):
                        'retrieve_date': pd.Series(timestamp)
                        })
 
-    #Insert friend into table
-    # TODO: Use new function defined earlier that seems to do this exact thing
-    connection = db_functions.db_connect()
-    cursor = connection.cursor()
-    sql = "INSERT INTO public.n_friends(username, user_id, follows_users, follows_ids, retrieve_date) " \
-          "VALUES (%s, %s, %s, %s, %s);"
-    for index in range(len(df.index)):
-        v1 = (df.iloc[index, 0])
-        v2 = int(df.iloc[index, 1])
-        v3 = (df.iloc[index, 2])
-        v4 = int(df.iloc[index, 3])
-        v5 = str(df.iloc[index, 4])
-        cursor.execute(sql, (v1, v2, v3, v4, v5))
-        connection.commit()
-    cursor.close()
-    db_functions.db_close(connection)
+    #Insert friends into table
+    db_functions.insert_to_table_followers_or_friends(df, table_name = 'n_friends', username = True)
     return len(df)
