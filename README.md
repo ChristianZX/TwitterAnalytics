@@ -29,7 +29,7 @@ Please note that collecting your own data can take weeks, due to Twitter API dow
 ##Table of Content
 
 ## Setup
-**TODO: Add requirements.txt, setup.py?**
+**TODO: setup.py?**
 
 Set up environment
 ````shell script
@@ -54,12 +54,23 @@ Therefore it also doest not come with an evaluation set. To get it, you will nee
 some users yourself. The more the better.  
 
 ## How it works
+The main challenge in this project was to work around the limitations of the Twitter API. The result was a five step process:
+ 
+
+![High_Level_Process][High_Level_Process]
+
+[High_Level_Process]: https://github.com/ChristianZX/TwitterAnalytics/blob/master/images/HighLevelProcess.PNG "High Level Process"
+
 **Step 1) Fine-Tune BERT**
 The used German BERT needs to be fine-tuned on political tweets. I did it with 100.000 moderate
 and right wing Tweets. Since I could not annotate the 200.000 Tweets I used lists of
 clearly moderate and right-wing politicians. This approach haas disadvantages (low recall) which I will discus in step 5
 and hope to improve in future.
-**Insert Bert Training Image**?   
+
+![BERT_Training][BERT_training]
+
+[BERT_Training]: https://github.com/ChristianZX/TwitterAnalytics/blob/master/images/BertTraining.PNG "BERT Training"
+
 
 **Step 2) Download 200 Million Followers**
 
