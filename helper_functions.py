@@ -191,7 +191,7 @@ def calculate_combined_score(bert_friends_high_confidence_capp_off:float, self_c
     result = 0
 
     if self_lr == bert_friends_lr and self_lr in ['links', 'rechts'] and number_of_bert_friends_L + number_of_bert_friends_R >= min_required_bert_friend_opinions:
-        new_conf = self_lr_conf * 0.6 + bert_friends_lr_conf * 0.6
+        new_conf = self_lr_conf * 0.65 + bert_friends_lr_conf * 0.65
         if new_conf > 1:
             new_conf = 1
         result = [self_lr, new_conf]
@@ -289,20 +289,22 @@ def count_friend_stances(df: pd.DataFrame, friend_lst: list, column_to_count: st
          result_timestamp_series], axis=1)
     return df_result
 
-def add_more_eval_user_tweets():
-    table_name = 'eval_table'
-    #table_name = 'temp_table'
 
-    sql_left = "select distinct cast (fh.user_id as text) from facts_hashtags fh, n_users u where fh.user_id = u.id and combined_rating in ('links') and combined_conf >= 0.75 except select distinct user_id from eval_table limit 25"
-    df_left = db_functions.select_from_db(sql_left)
+def add_eval_user_tweets(moderate_ids, right_ids, table_name = 'eval_table'):
+    """
+    Downloads tweets of given user into table eval_table.
+    :param moderate_ids: List of Twitter Account IDs with moderate stance to be added to the evaluation set
+    :param right_ids: List of Twitter Account IDs with right stance to be added to the evaluation set
+    :param table_name: Name of evaluation table
+    :return:
+    """
+
+    sql_moderate = "select distinct cast (fh.user_id as text) from facts_hashtags fh, n_users u where fh.user_id = u.id and combined_rating in ('links') and combined_conf >= 0.75 except select distinct user_id from eval_table limit 25"
+    df_moderate = db_functions.select_from_db(sql_moderate)
 
     sql_right = "select distinct cast (fh.user_id as text) from facts_hashtags fh, n_users u where fh.user_id = u.id and combined_rating in ('rechts') and combined_conf >= 0.75 except select distinct user_id from eval_table limit 25"
     df_right = db_functions.select_from_db(sql_right)
-    combined_lst = pd.concat([df_left['user_id'], df_right['user_id']]).to_list()
-
-    sql = "select * from (select * from ( select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.65 and combined_rating = 'links' and screen_name is not null and lr is not null limit 15 ) a except select distinct user_id as id from eval_table) a  union select * from (select * from (select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.65 and combined_rating = 'rechts' and screen_name is not null and lr is not null limit 15 ) a except select distinct user_id as id from eval_table) b union select * from (select * from (select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.70 and combined_rating = 'links' and screen_name is not null and lr is not null limit 15) a except select distinct user_id as id from eval_table) c union select * from (select * from (select cast (u.id as text) from n_users u where round(combined_conf,2) = 0.70 and combined_rating = 'rechts' and screen_name is not null and lr is not null limit 15 ) a except select distinct user_id as id from eval_table) d"
-    combined_df = db_functions.select_from_db(sql)
-    combined_lst = combined_df.values.tolist()
+    combined_lst = pd.concat([df_moderate['user_id'], df_right['user_id']]).to_list()
 
     for element in tqdm(combined_lst):
         TwitterAPI.API_tweet_multitool(element[0], table_name, pages=1, method='user_timeline', append=True, write_to_db=True)
@@ -310,5 +312,5 @@ def add_more_eval_user_tweets():
     print ("Bing")
 
 if __name__ == "__main__":
-    add_more_eval_user_tweets()
+    add_eval_user_tweets()
 

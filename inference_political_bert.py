@@ -11,9 +11,6 @@ import db_functions
 from helper_functions import lang_detect
 
 
-
-
-
 def bert_predictions(tweet: pd.DataFrame, model: ClassificationModel):
     """
     Bert Inference for prediction.
@@ -57,7 +54,7 @@ def eval_bert() -> None:
     print("Loading BERT")
     #older version
     #model_path = r"C:\Users\Admin\PycharmProjects\untitled\outputs\political_bert_1605094936.6519241\checkpoint-15000"
-    model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
     model = load_model(model_path)
     print("Querying BERT")
     

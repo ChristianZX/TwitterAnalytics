@@ -56,43 +56,44 @@ def get_followers(sql: str) -> None:
             db_functions.update_table(sql)
 
 
-def download_user_timelines():
+def download_user_timelines(political_moderate_list: list, right_wing_populists_list: list):
     """
     Downloads user timelines of users featured in below lists. The downloads are used as training material for AI
     training. All lists are just incomplete examples.
     :return:
     """
 
+    #List examples
+    # political_moderate_list = ['_pik_dame_', 'Leekleinkunst', 'MartinaKraus7', 'KAFVKA', 'Volksverpetzer', 'insideX',
+    #                            'FranziLucke', 'leonie_stella9', 'Ute631', 'justMPO', 'anouk_avf', 'Komisaar',
+    #                            'MenschBernd', 'von_ems', 'lies_das', 'seewanda', 'Rene_Bacher', 'Prasanita93',
+    #                            'IgorUllrich', 'AJSalzgitter', 'Bussi72', 'HuWutze', 'strahlgewitter', 'PhilKupi',
+    #                            'BaldusEla', 'LarsKlingenberg', 'MichaelSchfer71', 'EddyAges', 'veripot', 'JoernPL',
+    #                            'ondreka', 'kleinerJedi', 'DanielKinski', 'wfh7175', 'Sister_records1', 'TinaJergerkamp']
+    # right_wing_populists_list = ['Junge_Freiheit', 'zaferflocken', 'HelmutWachler', 'M_Briefing', 'TinVonWo', 'mcwd12',
+    #                              'EBlume3', 'h_hendrich']
+
+
+    #Political unpolitical stance is currently not used
     # Tweets of below accounts will be downloaded from twitter. During model a subset of below accounts might be used.
-    unpolitical_list = ['Podolski10', 'fckoeln', 'FCBayern', 'BVB', 'rtl2', 'DMAX_TV', 'tim_kocht', 'grandcheflafer',
-                        'bildderfrau', 'gala', 'BUNTE', 'promiflash', 'funny_catvideos', 'BibisBeauty', 'dagibee',
-                        'siggismallz', 'Gronkh', 'CHIP_online', 'COMPUTERWOCHE', 'SkySportNewsHD', 'MOpdenhoevel',
-                        'kayefofficial', 'VOGUE_Germany', 'lucycatofficial', 'RealLexyRoxx', 'AnselmSchindler',
-                        'pentru_tine', 'KaJa80028344']
+    # unpolitical_list = ['Podolski10', 'fckoeln', 'FCBayern', 'BVB', 'rtl2', 'DMAX_TV', 'tim_kocht', 'grandcheflafer',
+    #                     'bildderfrau', 'gala', 'BUNTE', 'promiflash', 'funny_catvideos', 'BibisBeauty', 'dagibee',
+    #                     'siggismallz', 'Gronkh', 'CHIP_online', 'COMPUTERWOCHE', 'SkySportNewsHD', 'MOpdenhoevel',
+    #                     'kayefofficial', 'VOGUE_Germany', 'lucycatofficial', 'RealLexyRoxx', 'AnselmSchindler',
+    #                     'pentru_tine', 'KaJa80028344']
 
     #unpolitical_list = ['Podolski10'] For Testing
 
-    political_list = ['Thomas_Ehrhorn', 'HilseMdb', 'DirkSpaniel', 'MdB_Lucassen', 'RolandTichy', 'UllmannMdB',
-                      'c_jung77', 'michael_g_link', 'theliberalfrank', 'IreneMihalic', 'KaiGehring', 'RenateKuenast',
-                      'GoeringEckardt', 'MdB_Freihold', 'ZaklinNastic', 'PetraPauMaHe', 'lgbeutin', 'arnoklare',
-                      'zierke', 'Timon_Gremmels', 'Johann_Saathoff', 'uhl_markus', 'AnjaKarliczek', 'KLeikert',
-                      'Junge_Gruppe']
+    # political_list = ['Thomas_Ehrhorn', 'HilseMdb', 'DirkSpaniel', 'MdB_Lucassen', 'RolandTichy', 'UllmannMdB',
+    #                   'c_jung77', 'michael_g_link', 'theliberalfrank', 'IreneMihalic', 'KaiGehring', 'RenateKuenast',
+    #                   'GoeringEckardt', 'MdB_Freihold', 'ZaklinNastic', 'PetraPauMaHe', 'lgbeutin', 'arnoklare',
+    #                   'zierke', 'Timon_Gremmels', 'Johann_Saathoff', 'uhl_markus', 'AnjaKarliczek', 'KLeikert',
+    #                   'Junge_Gruppe']
 
-    political_moderate_list = ['_pik_dame_', 'Leekleinkunst', 'MartinaKraus7', 'KAFVKA', 'Volksverpetzer', 'insideX',
-                               'FranziLucke', 'leonie_stella9', 'Ute631', 'justMPO', 'anouk_avf', 'Komisaar',
-                               'MenschBernd', 'von_ems', 'lies_das', 'seewanda', 'Rene_Bacher', 'Prasanita93',
-                               'IgorUllrich', 'AJSalzgitter', 'Bussi72', 'HuWutze', 'strahlgewitter', 'PhilKupi',
-                               'BaldusEla', 'LarsKlingenberg', 'MichaelSchfer71', 'EddyAges', 'veripot', 'JoernPL',
-                               'ondreka', 'kleinerJedi', 'DanielKinski', 'wfh7175', 'Sister_records1', 'TinaJergerkamp']
-    right_wing_populists_list = ['Junge_Freiheit', 'zaferflocken', 'HelmutWachler', 'M_Briefing', 'TinVonWo', 'mcwd12',
-                                 'EBlume3', 'h_hendrich']
-
-    #List Download
-    user_lists = {'unpolitical_list': unpolitical_list,
-                  'political_list': political_list,
-                  'political_moderate_list': political_moderate_list,
+    user_lists = {'political_moderate_list': political_moderate_list,
                   'right_wing_populists_list': right_wing_populists_list}
 
+    # List Download
     for list_name, username_list in user_lists.items():
         for element in username_list:
             TwitterAPI.API_tweet_multitool(element, list_name, pages=10, method='user_timeline',
@@ -110,7 +111,7 @@ def pickle_file_load_launcher(TFIDF_pol_unpol_conv, Algorithm_pol_unpol):
     return TFIDF_pol_unpol_conv, Algo_pol_unpol
 
 
-def user_analyse_launcher(iterations: int, sql: str) -> None:
+def user_analyse_launcher(iterations: int, sql: str, BERT_Model_path) -> None:
     """
     Starts analysis of user in result of SQL statement. Writes results to DB in table n_users
     :param iterations: Number of times the SQL statement is used to get new users from DB.
@@ -126,18 +127,20 @@ def user_analyse_launcher(iterations: int, sql: str) -> None:
     pre_update = "insert into n_users (id) select distinct user_id from facts_hashtags except select id from n_users"
     db_functions.update_table(pre_update)
 
-    TFIDF_pol_unpol_conv_path = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_TFIDF_5k_SGD.pkl"  # SGD for Website
-    Algorithm_pol_unpol_path = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_SGD_5k.pkl"  # SGD for Website
-    model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    #Unused Feature for political not political prediction
+    #TFIDF_pol_unpol_conv_path = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_TFIDF_5k_SGD.pkl"  # SGD for Website
+    #Algorithm_pol_unpol_path = r"C:\Users\Admin\PycharmProjects\untitled\TFIDF02_pol_SGD_5k.pkl"  # SGD for Website
+    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
 
-    TFIDF_pol_unpol_conv, Algo_pol_unpol = pickle_file_load_launcher(TFIDF_pol_unpol_conv_path, Algorithm_pol_unpol_path)
+    #TFIDF_pol_unpol_conv, Algo_pol_unpol = pickle_file_load_launcher(TFIDF_pol_unpol_conv_path, Algorithm_pol_unpol_path)
     BERT_model = inference_political_bert.load_model(model_path)
 
     # Name of temp table in DB. Is deleted at the end of this function
     table_name = 'temp_result'
     for i in tqdm(range(iterations)):  # should be enough iterations to analyse complete hashtag (Example: 5000
         # Users in Hashtag / User Batch Size 200 = 25 iterations)
-        prediction_launcher(table_name, TFIDF_pol_unpol_conv, Algo_pol_unpol, BERT_model, sql, write_to_db=True)  #
+        prediction_launcher(table_name, BERT_model, sql, write_to_db=True)
+        #prediction_launcher(table_name, BERT_model, sql, write_to_db=True, TFIDF_pol_unpol_conv, Algo_pol_unpol)
         # analyse hashtags and write result to DB
         update_sql = f"update n_users set lr = lr_text, lr_conf = cast (a.lr_conf as numeric), pol = pol_text, " \
                      f"pol_conf = cast (a.pol_conf as numeric), lr_pol_last_analysed = analyse_date from {table_name} " \
@@ -149,16 +152,16 @@ def user_analyse_launcher(iterations: int, sql: str) -> None:
         gc.collect()
 
 
-def prediction_launcher(table_name: str, TFIDF_pol_unpol_conv, Algo_pol_unpol, BERT_model, sql: str,
-                        write_to_db: bool = True):
+def prediction_launcher(table_name: str, BERT_model, sql: str,
+                        write_to_db: bool = True, TFIDF_pol_unpol_conv = 0, Algo_pol_unpol = 0):
     """
     Loads 200 Tweets (one page call) per users and sends them to BERT for inference
     :param table_name: Name of temp table used to store results
-    :param TFIDF_pol_unpol_conv: tfidf converter
-    :param Algo_pol_unpol: Random Forrest classifier
     :param BERT_model: BERT Model
     :param sql: Statement providing Users to be inferenced
     :param write_to_db: True or False
+    :param TFIDF_pol_unpol_conv: tfidf converter (optional)
+    :param Algo_pol_unpol: Random Forrest classifier (optional)
     :return:
     """
     start_time_overal = time.time()
@@ -201,7 +204,10 @@ def prediction_launcher(table_name: str, TFIDF_pol_unpol_conv, Algo_pol_unpol, B
         for method in methods:
             prediction_result = []
             if method == 'pol':
-                prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], TFIDF_pol_unpol_conv, Algo_pol_unpol))
+                if TFIDF_pol_unpol_conv == 0 or Algo_pol_unpol == 0:
+                    print ("Warning: No Political/Unpolitical classifier given. Check function parameters.")
+                else:
+                    prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], TFIDF_pol_unpol_conv, Algo_pol_unpol))
             if method == 'LR':
                 prediction_result.append(inference_political_bert.bert_predictions(df_tweets['tweet'], BERT_model))
             runtime = int(time.time() - start_time)
@@ -382,7 +388,7 @@ def combined_scores_calc_launcher(sql: str, bert_friends_high_confidence_capp_of
     print(f"\nAccounts without rating: {total_rating_less_accounts}")
     print(f"Rated accounts: {count_rated_accounts}")
     print("\n\n")
-    print("Calculation done. Writing result to DB.")
+    print("Calculation done. Writing results to DB.")
 
     del df
     id_dict = {k: v for k, v in id_dict.items() if v != 0}
@@ -472,16 +478,19 @@ if __name__ == '__main__':
     #TFIDF_train.run_rnd_forrest_training()
 
     #evaluation based on accounts in table eval_table
-    #inference_political_bert.eval_bert()
+    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    #inference_political_bert.eval_bert(model_path)
 
     # Give LR ratings to accounts with many followers (Bert inference for big users who have not yet a self Bert score)
-    # sql = "select distinct id as user_id, screen_name as username from n_followers fo, n_users u where fo.user_id = u.id and lr is null"
-    # user_analyse_launcher(iterations=1, sql=sql)
+    #sql = "select distinct id as user_id, screen_name as username from n_followers fo, n_users u where fo.user_id = u.id and lr is null"
+    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    #user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
 
     ###improve L/R rated user base for better predictions
     #Give LR rating to accounts that FOLLOW many accounts that are in n_followers (Bert inference for users in n_users without self_Bert score, who follow at least 100 Big Users)
     # sql = "SELECT DISTINCT id AS user_id,                 screen_name AS username FROM n_users u, (SELECT follows_ids,          COUNT (follows_ids)    FROM n_followers f   GROUP BY follows_ids    HAVING COUNT (follows_ids) >= 100) a  WHERE CAST (a.follows_ids AS bigint) = u.id AND lr IS NULL limit 200"
-    # user_analyse_launcher(iterations= 300, sql)
+    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    #user_analyse_launcher(iterations= 300, sql, model_path=model_path)
 
     #Refreshes score for all users in DB who have a Bert LR rating and follow someone in n_followers
     #Since it affects all users that qualify for a LR rating, it also affects users of any downloaded hashtag you want to analyse
@@ -500,48 +509,143 @@ if __name__ == '__main__':
     #The LR-self rating is based on the users tweets
     #hashtag = 'le0711'
     #hashtag = 'b2908'
-    # sql = f"SELECT DISTINCT u.id AS user_id, screen_name AS username FROM n_users u, (SELECT follows_ids, COUNT (follows_ids) FROM n_followers f GROUP BY follows_ids HAVING COUNT (follows_ids) >= 100) a ,facts_hashtags fh WHERE CAST (a.follows_ids AS bigint) = u.id AND lr IS NULL AND fh.user_id = u.id AND fh.from_staging_table like '%{hashtag}%' LIMIT 200"
-    # user_analyse_launcher(iterations=1, sql=sql)
+    sql = f"""
+    SELECT DISTINCT u.id AS user_id,
+                screen_name AS username
+    FROM n_users u,
+    (SELECT follows_ids,
+          COUNT (follows_ids)
+    FROM n_followers f
+    GROUP BY follows_ids
+    HAVING COUNT (follows_ids) >= 100) a,
+     facts_hashtags fh
+    WHERE CAST (a.follows_ids AS bigint) = u.id
+      AND lr IS NULL
+      AND fh.user_id = u.id
+      AND fh.from_staging_table like '%{hashtag}%'
+    LIMIT 200
+    """
+    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    #user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
     # Overwrite / Refresh LR-self rating for all users of a hashtag
     #sql = f"select distinct u.id AS user_id, screen_name AS username  from facts_hashtags f, n_users u where f.hashtags = '{hashtag}' and f.user_id = u.id and u.lr is null"
-    #user_analyse_launcher(iterations= 1, sql=sql)
+    #user_analyse_launcher(iterations= 1, sql=sql, model_path=model_path)
 
     #Refreshes LR-friend rating for all users in hashtag who have a Bert LR rating and follow someone in n_followers
     #The LR-friend rating is based on the LR-self rating of account a user follows
-    # hashtag = 'le0711'
-    # #hashtag = 'b2908'
-    # sql = f"SELECT distinct f.follows_ids,       u.screen_name,       u.lr AS bert_self,       f.user_id,       u2.lr AS bert_friends FROM n_users u,     n_followers f,     n_users u2,	 facts_hashtags fh WHERE u.id = CAST (f.follows_ids AS bigint)  AND u2.id = f.user_id  AND u2.lr in ('links', 'rechts')  AND fh.user_id = u.id   AND fh.from_staging_table like '%{hashtag}%' ORDER BY follows_ids"
-    # refresh_score_in_DB(sql ,get_data_from_DB = True)
+    hashtag = 'le0711'
+    #hashtag = 'b2908'
+    sql = f"SELECT distinct f.follows_ids,       u.screen_name,       u.lr AS bert_self,       f.user_id,       u2.lr AS bert_friends FROM n_users u,     n_followers f,     n_users u2,	 facts_hashtags fh WHERE u.id = CAST (f.follows_ids AS bigint)  AND u2.id = f.user_id  AND u2.lr in ('links', 'rechts')  AND fh.user_id = u.id   AND fh.from_staging_table like '%{hashtag}%' ORDER BY follows_ids"
+    refresh_score_in_DB(sql ,get_data_from_DB = True)
 
     #Calculates combined score from users self-LR score and users bert_friend score
     #all users
     bert_friends_high_confidence_capp_off = 0.70
     self_conf_high_conf_capp_off = 0.70
     min_required_bert_friend_opinions = 10
-    sql = f"SELECT id,		   screen_name,		   lr,		   lr_conf,		   result_bert_friends,		   bert_friends_conf,		   bf_left_number,		   bf_right_number FROM n_users	WHERE (lr IS NOT NULL		   OR result_bert_friends IS NOT NULL)		   and combined_rating is null"
+    sql = """
+    SELECT id,
+       screen_name,
+       lr,
+       lr_conf,
+       result_bert_friends,
+       bert_friends_conf,
+       bf_left_number,
+       bf_right_number
+    FROM n_users
+    WHERE (lr IS NOT NULL
+       OR result_bert_friends IS NOT NULL)
+    AND combined_rating IS NULL
+    """
     #hashtag only
     #hashtag = 'le0711'
     #hashtag = 'b2908'
-    #sql = f"SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number FROM n_users WHERE (lr IS NOT NULL        OR result_bert_friends IS NOT NULL)   AND combined_rating IS NULL  and id in (select distinct f.user_id from facts_hashtags f where from_staging_table like '%{hashtag}%')"
+    # sql = f"""
+    # SELECT id,
+    #    screen_name,
+    #    lr,
+    #    lr_conf,
+    #    result_bert_friends,
+    #    bert_friends_conf,
+    #    bf_left_number,
+    #    bf_right_number
+    # FROM n_users
+    # WHERE (lr IS NOT NULL
+    #    OR result_bert_friends IS NOT NULL)
+    #    AND combined_rating IS NULL
+    #    AND id in
+    #    (SELECT DISTINCT f.user_id
+    #     FROM facts_hashtags f
+    #     WHERE from_staging_table like '%{hashtag}%')
+    # """
     #test_sql = "SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number  from n_users where id = 843210563190771713"
     combined_scores_calc_launcher(sql, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off, min_required_bert_friend_opinions)
 
-    #Counts how many left or right friends a user has. Unlike seamingly similar functions (who download and analyse tweets),
-    #this one gets user profiles from DB as DF.
-    #For users that need special attention because they did not get a combined score due to bad BERT_friend score.
-    #hashtag = 'le0711'
-    #hashtag = 'b2908'
-    #conf_level = 0.70
-    #min_required_bert_friend_opinions = 10
-    #sql = f"select distinct u.id, u2.id as friend_id, u2.lr, u2.lr_conf, u2.result_bert_friends, u2.bert_friends_conf, u2.bf_left_number, u2.bf_right_number,u2.combined_rating, u2.combined_conf from facts_hashtags f, n_users u, n_friends fr, n_users u2 where from_staging_table like '%{hashtag}%' and f.user_id = fr.user_id and fr.user_id = u.id and cast (fr.follows_ids as numeric) = u2.id and u.combined_rating is null and u2.result_bert_friends in ('links','rechts') and u2.bert_friends_conf >= {conf_level} order by u.id"
-    #get_BERT_friends_scores_from_friends(sql, min_required_bert_friend_opinions)
+    # Counts how many left or right friends a user has. Unlike seamingly similar functions (who download and analyse tweets),
+    # this one gets user profiles from DB as DF.
+    # For users that need special attention because they did not get a combined score due to bad BERT_friend score.
+    hashtag = 'le0711'
+    hashtag = 'b2908'
+    conf_level = 0.70
+    min_required_bert_friend_opinions = 10
+    sql = f"""
+    SELECT DISTINCT u.id,
+                u2.id AS friend_id,
+                u2.lr,
+                u2.lr_conf,
+                u2.result_bert_friends,
+                u2.bert_friends_conf,
+                u2.bf_left_number,
+                u2.bf_right_number,
+                u2.combined_rating,
+                u2.combined_conf
+    FROM facts_hashtags f,
+         n_users u,
+         n_friends fr,
+         n_users u2
+    WHERE from_staging_table like '%{hashtag}%'
+      AND f.user_id = fr.user_id
+      AND fr.user_id = u.id
+      AND CAST (fr.follows_ids AS numeric) = u2.id
+      AND u.combined_rating IS NULL
+      AND u2.result_bert_friends in ('links',
+                                     'rechts')
+      AND u2.bert_friends_conf >= {conf_level}
+    ORDER BY u.id
+    """
+    get_BERT_friends_scores_from_friends(sql, min_required_bert_friend_opinions)
 
-    #hashtag = 'le0711'
-    #hashtag = 'b2908'
-    #sql = f"SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number FROM n_users WHERE (lr IS NOT NULL        OR result_bert_friends IS NOT NULL)   AND combined_rating IS NULL  and id in (select distinct f.user_id from facts_hashtags f where from_staging_table like '%{hashtag}%')"
-    #get_combined_scores_from_followers(sql)
+    #Run combined_scores for users that got a friend rating after downloading their friends directly
+    hashtag = 'le0711'
+    hashtag = 'b2908'
+    sql = f"""
+    SELECT id,
+           screen_name,
+           lr,
+           lr_conf,
+           result_bert_friends,
+           bert_friends_conf,
+           bf_left_number,
+           bf_right_number
+    FROM n_users
+    WHERE (lr IS NOT NULL
+           OR result_bert_friends IS NOT NULL)
+      AND combined_rating IS NULL
+      AND id in
+        (SELECT DISTINCT f.user_id
+         FROM facts_hashtags f
+         WHERE from_staging_table like '%{hashtag}%')"""
+    get_combined_scores_from_followers(sql)
 
-    #hashtag = 'le0711'
-    #hashtag = 'b2908'
-    #sql = f"select count (distinct u.id) from facts_hashtags f, n_users u where from_staging_table like '%{hashtag}%' and f.user_id = u.id and combined_rating in ('links','rechts')"
-    #print (db_functions.select_from_db(sql))
+    #Print number of newly found results
+    hashtag = 'le0711'
+    hashtag = 'b2908'
+    sql = f"""
+    SELECT COUNT (DISTINCT u.id)
+    FROM facts_hashtags f,
+         n_users u
+    WHERE from_staging_table like '%{hashtag}%'
+      AND f.user_id = u.id
+      AND combined_rating in ('links',
+                              'rechts')"""
+    print (db_functions.select_from_db(sql))
