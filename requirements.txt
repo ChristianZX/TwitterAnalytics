@@ -10,3 +10,4 @@ numpy~=1.18.5
 langdetect~=1.0.8
 simpletransformers~=0.48.14
 transformers~=3.4.0
+tensorboard==2.3

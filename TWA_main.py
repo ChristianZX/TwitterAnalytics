@@ -509,33 +509,39 @@ if __name__ == '__main__':
     #The LR-self rating is based on the users tweets
     #hashtag = 'le0711'
     #hashtag = 'b2908'
-    sql = f"""
-    SELECT DISTINCT u.id AS user_id,
-                screen_name AS username
-    FROM n_users u,
-    (SELECT follows_ids,
-          COUNT (follows_ids)
-    FROM n_followers f
-    GROUP BY follows_ids
-    HAVING COUNT (follows_ids) >= 100) a,
-     facts_hashtags fh
-    WHERE CAST (a.follows_ids AS bigint) = u.id
-      AND lr IS NULL
-      AND fh.user_id = u.id
-      AND fh.from_staging_table like '%{hashtag}%'
-    LIMIT 200
-    """
-    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
-    #user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
+    #To Do: improve Long SQL runtime
+    # sql = f"""
+    # SELECT DISTINCT u.id AS user_id, screen_name AS username
+    # FROM n_users u, facts_hashtags fh,
+    # (SELECT follows_ids,COUNT (follows_ids) FROM n_followers f GROUP BY follows_ids HAVING COUNT (follows_ids) >= 100) a
+    # WHERE CAST (a.follows_ids AS bigint) = u.id
+    # AND lr IS NULL
+    # AND fh.user_id = u.id
+    # AND fh.from_staging_table like '%{hashtag}%'
+    # limit 200
+    # """
+    # model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    # user_analyse_launcher(iterations=100, sql=sql, model_path=model_path)
+
     # Overwrite / Refresh LR-self rating for all users of a hashtag
     #sql = f"select distinct u.id AS user_id, screen_name AS username  from facts_hashtags f, n_users u where f.hashtags = '{hashtag}' and f.user_id = u.id and u.lr is null"
     #user_analyse_launcher(iterations= 1, sql=sql, model_path=model_path)
 
     #Refreshes LR-friend rating for all users in hashtag who have a Bert LR rating and follow someone in n_followers
     #The LR-friend rating is based on the LR-self rating of account a user follows
-    hashtag = 'le0711'
-    #hashtag = 'b2908'
-    sql = f"SELECT distinct f.follows_ids,       u.screen_name,       u.lr AS bert_self,       f.user_id,       u2.lr AS bert_friends FROM n_users u,     n_followers f,     n_users u2,	 facts_hashtags fh WHERE u.id = CAST (f.follows_ids AS bigint)  AND u2.id = f.user_id  AND u2.lr in ('links', 'rechts')  AND fh.user_id = u.id   AND fh.from_staging_table like '%{hashtag}%' ORDER BY follows_ids"
+    #hashtag = 'le0711'
+    hashtag = 'b2908'
+    sql = f"""
+    SELECT DISTINCT f.follows_ids, u.screen_name, u.lr AS bert_self, f.user_id, u2.lr AS bert_friends
+    FROM n_users u, n_followers f, n_users u2, facts_hashtags fh
+    WHERE u.id = CAST (f.follows_ids AS bigint)
+    AND u2.id = f.user_id
+    AND u2.lr in ('links',
+    'rechts')
+    AND fh.user_id = u.id
+    AND fh.from_staging_table like '%{hashtag}%'
+    ORDER BY follows_ids
+    """
     refresh_score_in_DB(sql ,get_data_from_DB = True)
 
     #Calculates combined score from users self-LR score and users bert_friend score
@@ -543,109 +549,74 @@ if __name__ == '__main__':
     bert_friends_high_confidence_capp_off = 0.70
     self_conf_high_conf_capp_off = 0.70
     min_required_bert_friend_opinions = 10
-    sql = """
-    SELECT id,
-       screen_name,
-       lr,
-       lr_conf,
-       result_bert_friends,
-       bert_friends_conf,
-       bf_left_number,
-       bf_right_number
-    FROM n_users
-    WHERE (lr IS NOT NULL
-       OR result_bert_friends IS NOT NULL)
-    AND combined_rating IS NULL
-    """
+    # sql = """
+    # SELECT id, screen_name, lr, lr_conf, result_bert_friends, bert_friends_conf, bf_left_number, bf_right_number
+    # FROM n_users
+    # WHERE (lr IS NOT NULL OR result_bert_friends IS NOT NULL)
+    # AND combined_rating IS NULL
+    # """
     #hashtag only
     #hashtag = 'le0711'
     #hashtag = 'b2908'
-    # sql = f"""
-    # SELECT id,
-    #    screen_name,
-    #    lr,
-    #    lr_conf,
-    #    result_bert_friends,
-    #    bert_friends_conf,
-    #    bf_left_number,
-    #    bf_right_number
-    # FROM n_users
-    # WHERE (lr IS NOT NULL
-    #    OR result_bert_friends IS NOT NULL)
-    #    AND combined_rating IS NULL
-    #    AND id in
-    #    (SELECT DISTINCT f.user_id
-    #     FROM facts_hashtags f
-    #     WHERE from_staging_table like '%{hashtag}%')
-    # """
+    sql = f"""
+    SELECT id, screen_name, lr, lr_conf, result_bert_friends, bert_friends_conf, bf_left_number, bf_right_number
+    FROM n_users
+    WHERE (lr IS NOT NULL OR result_bert_friends IS NOT NULL)
+    AND combined_rating IS NULL
+    AND id in
+       (SELECT DISTINCT f.user_id
+        FROM facts_hashtags f
+        WHERE from_staging_table like '%{hashtag}%')
+    """
     #test_sql = "SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number  from n_users where id = 843210563190771713"
     combined_scores_calc_launcher(sql, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off, min_required_bert_friend_opinions)
 
     # Counts how many left or right friends a user has. Unlike seamingly similar functions (who download and analyse tweets),
     # this one gets user profiles from DB as DF.
     # For users that need special attention because they did not get a combined score due to bad BERT_friend score.
-    hashtag = 'le0711'
-    hashtag = 'b2908'
+    # hashtag = 'le0711'
+    # hashtag = 'b2908'
     conf_level = 0.70
     min_required_bert_friend_opinions = 10
     sql = f"""
-    SELECT DISTINCT u.id,
-                u2.id AS friend_id,
-                u2.lr,
-                u2.lr_conf,
-                u2.result_bert_friends,
-                u2.bert_friends_conf,
-                u2.bf_left_number,
-                u2.bf_right_number,
-                u2.combined_rating,
-                u2.combined_conf
-    FROM facts_hashtags f,
-         n_users u,
-         n_friends fr,
-         n_users u2
+    SELECT DISTINCT u.id, u2.id AS friend_id, u2.lr, u2.lr_conf, u2.result_bert_friends, u2.bert_friends_conf,
+    u2.bf_left_number, u2.bf_right_number, u2.combined_rating, u2.combined_conf
+    FROM facts_hashtags f, n_users u, n_friends fr, n_users u2
     WHERE from_staging_table like '%{hashtag}%'
-      AND f.user_id = fr.user_id
-      AND fr.user_id = u.id
-      AND CAST (fr.follows_ids AS numeric) = u2.id
-      AND u.combined_rating IS NULL
-      AND u2.result_bert_friends in ('links',
-                                     'rechts')
-      AND u2.bert_friends_conf >= {conf_level}
+    AND f.user_id = fr.user_id
+    AND fr.user_id = u.id
+    AND CAST (fr.follows_ids AS numeric) = u2.id
+    AND u.combined_rating IS NULL
+    AND u2.result_bert_friends in ('links', 'rechts')
+    AND u2.bert_friends_conf >= {conf_level}
     ORDER BY u.id
     """
     get_BERT_friends_scores_from_friends(sql, min_required_bert_friend_opinions)
 
     #Run combined_scores for users that got a friend rating after downloading their friends directly
-    hashtag = 'le0711'
-    hashtag = 'b2908'
+    # hashtag = 'le0711'
+    # hashtag = 'b2908'
     sql = f"""
-    SELECT id,
-           screen_name,
-           lr,
-           lr_conf,
-           result_bert_friends,
-           bert_friends_conf,
-           bf_left_number,
-           bf_right_number
+    SELECT id, screen_name, lr, lr_conf, result_bert_friends, bert_friends_conf, bf_left_number, bf_right_number
     FROM n_users
-    WHERE (lr IS NOT NULL
-           OR result_bert_friends IS NOT NULL)
-      AND combined_rating IS NULL
-      AND id in
+    WHERE (lr IS NOT NULL OR result_bert_friends IS NOT NULL)
+    AND combined_rating IS NULL
+    AND id in
         (SELECT DISTINCT f.user_id
          FROM facts_hashtags f
          WHERE from_staging_table like '%{hashtag}%')"""
-    get_combined_scores_from_followers(sql)
+
+    combined_scores_calc_launcher(sql, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off,
+                                  min_required_bert_friend_opinions)
 
     #Print number of newly found results
-    hashtag = 'le0711'
-    hashtag = 'b2908'
+    #hashtag = 'le0711'
+    #hashtag = 'b2908'
     sql = f"""
     SELECT COUNT (DISTINCT u.id)
-    FROM facts_hashtags f,
-         n_users u
+    FROM facts_hashtags f, n_users u
     WHERE from_staging_table like '%{hashtag}%'
       AND f.user_id = u.id
-      AND combined_rating in ('links',
-                              'rechts')"""
+      AND combined_rating in ('links', 'rechts')"""
+
     print (db_functions.select_from_db(sql))
