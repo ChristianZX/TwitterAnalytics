@@ -35,7 +35,7 @@ def api_limit():
 
 
 
-def API_Followers(screen_name: str, user_id: str, limit=12500000):
+def API_Followers(screen_name: str, user_id: str, download_limit=12500000):
     """
     Downloads Follower using API. Stops after 1000 pages (5Mio Followers), no matter how many there are.
     :param screen_name: Twitter screen_name. Technically not required but added to DB for convenient lockup
@@ -57,7 +57,7 @@ def API_Followers(screen_name: str, user_id: str, limit=12500000):
                 count += 1
             time.sleep(60)
             print("Scraping " + str(screen_name) + "Current Follower Count:" + str(len(followers)))
-            if count >= limit:
+            if count >= download_limit:
                 break
     except TweepError as e:
         if "Not authorized" in str(e):
