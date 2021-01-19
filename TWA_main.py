@@ -168,7 +168,8 @@ def prediction_launcher(table_name: str, BERT_model, sql: str,
     """
     start_time_overal = time.time()
     cur_date = str(date.today())  # date for last seen columns
-    methods = ['pol', 'LR']
+    #methods = ['pol', 'LR']
+    methods = ['LR']
     data = []
 
     # This DF will store all precditions results
@@ -198,7 +199,7 @@ def prediction_launcher(table_name: str, BERT_model, sql: str,
             db_functions.update_to_invalid(cur_date, user_id)
             continue
 
-        german_language = helper_functions.lang_detect(df_tweets, update=True)
+        german_language = helper_functions.lang_detect(df_tweets)
         if german_language is False:
             db_functions.update_to_invalid(cur_date, user_id)
             continue
