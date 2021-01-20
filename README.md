@@ -160,7 +160,7 @@ That's why downloading friends is only a last resort.
     ````python
     # Annotate users and write result into column eval_table.lr
     helper_functions.add_eval_user_tweets(moderate_ids, right_ids)
-    inference_political_bert.eval_bert(model_path)
+    TWA_Main.eval_bert(model_path)
     ```` 
     This will download the tweets of the evaluation users into `eval_table`. Without the tweets
     you can't do consistent evaluations since the users latest 200 tweets change constantly.  

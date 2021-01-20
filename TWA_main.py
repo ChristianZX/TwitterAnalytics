@@ -501,6 +501,61 @@ def prediction_launcher(table_name: str, BERT_model, sql: str,
     print(f"Runtime: {runtime}")
     return df_pred_data
 
+
+def eval_bert(model_path) -> None:
+    """
+    Runs evaluation against evaluation accounts in table "eval_table"
+    Return a printout of the results
+    :return: none
+    """
+    data = []
+    df_pred_data = pd.DataFrame(data, columns=['screen_name', 'pol', 'unpol', 'pol_time', 'left', 'right', 'lr_time'])
+    sql = "select distinct username from eval_table"
+    df = db_functions.select_from_db(sql)
+
+    print("Loading BERT")
+    # older version
+    # model_path = r"C:\Users\Admin\PycharmProjects\untitled\outputs\political_bert_1605094936.6519241\checkpoint-15000"
+    # model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    model = init(model_path)
+    print("Querying BERT")
+
+    for index, element in tqdm(df.iterrows(), total=df.shape[0]):
+
+        screen_name = element[0]
+
+        df_tweets = TwitterAPI.API_tweet_multitool(screen_name, 'temp', pages=1, method='user_timeline', append=False,
+                                                   write_to_db=False)  # speichert tweets in DF
+        if isinstance(df_tweets, str):  # if df_tweets is a string it contains an error message
+            continue
+        start_time = time.time()
+        german_language = helper_functions.lang_detect(df_tweets, update=True)
+        runtime = time.time() - start_time
+        print(f"Runtime Lang Detect: {runtime}")
+        if german_language is False:
+            continue
+        start_time = time.time()
+        prediction_result = [bert_predictions(df_tweets['tweet'], model)]
+        runtime = time.time() - start_time
+        print(f"Runtime Bert: {runtime}")
+
+        result = prediction_result[0]
+        df_pred_data.at[index, 'screen_name'] = screen_name
+        try:
+            df_pred_data.at[index, 'left'] = result[0]
+            df_pred_data.at[index, 'right'] = result[1]
+        except:
+            df_pred_data.at[index, 'left'] = 0
+            df_pred_data.at[index, 'right'] = 0
+        df_pred_data.at[index, 'lr_time'] = runtime
+
+    print("screen_name,Pol,Unpol,Pol_Time,Left,Right,LR_Time")
+    for index, element in df_pred_data.iterrows():
+        print(
+            f"{element['screen_name']},{element['pol']},{element['unpol']},{element['pol_time']},{element['left']},"
+            f"{element['right']},{int(element['lr_time'])}")
+
+
 if __name__ == '__main__':
     ###setup (not recurring)
 
@@ -532,6 +587,12 @@ if __name__ == '__main__':
     # Give LR ratings to accounts with many followers (Bert inference for big users who have not yet a self Bert score)
     #sql = "select distinct id as user_id, screen_name as username from n_followers fo, n_users u where fo.user_id = u.id and lr is null"
     sql = "select id as user_id, screen_name as username from n_users where id = 4767806597"
+    # Give LR rating to hashtag users that have none
+    hashtag = "150JahreVaterland"
+    sql = f"""select distinct u.id as user_id, u.screen_name as username from facts_hashtags f
+    left join n_users u on f.user_id = u.id
+    where from_staging_table like '%{hashtag}%'
+    and u.lr is null"""
     model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
     user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
 
@@ -684,7 +745,3 @@ if __name__ == '__main__':
     #     TwitterAPI.API_get_single_user_object(element[1][0])
 
 
-    # run()
-    # model = init()
-    # data = bert_predictions("das ist ein Test tweet", model)
-    # print(data)
