@@ -129,12 +129,12 @@ def update_table(sql):
     """
     connection = db_connect()
     cursor = connection.cursor()
-    print(sql)
+    print(f"Update starts now with statement: {sql}")
     cursor.execute(sql)
     connection.commit()
     cursor.close()
     db_close(connection)
-    print(f"Update statement sent: {sql}")
+    print("Update completed.")
 
 
 def update_to_invalid(cur_date, user_id):

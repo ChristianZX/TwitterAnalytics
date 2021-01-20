@@ -1,19 +1,66 @@
+import collections
 from datetime import date
 import gc
+import logging
+import os
 import pandas as pd
 import TwitterAPI
 from tqdm import tqdm
-import time
 import db_functions
 from datetime import datetime
 import helper_functions
-import inference_political_bert
+import time
+import torch
+from transformers import logging
 import TFIDF_inference
 import sys
-import sn_scrape
-
+from simpletransformers.classification import ClassificationModel
 from helper_functions import calculate_combined_score, count_friend_stances
 
+
+def bert_predictions(tweet: pd.DataFrame, model: ClassificationModel):
+    """
+    Bert Inference for prediction.
+    :param tweet: dataframe with tweets
+    :param model: Bert Model
+    :return: list of pr
+    """
+    predictions, raw_outputs = model.predict(tweet)
+    auswertung = collections.Counter(predictions)
+    return auswertung
+
+def init(model_path):
+    """
+    Loads Bert Model
+    :param model_path: Path of BERT Model to load
+    :return: model
+    """
+    os.environ['WANDB_MODE'] = 'dryrun'
+    logging.set_verbosity_warning()
+    train_args = {
+        "reprocess_input_data": True,
+        "fp16": False,
+        "num_train_epochs": 30,
+        "overwrite_output_dir": True,
+        "save_model_every_epoch": True,
+        "save_eval_checkpoints": True,
+        "learning_rate": 5e-7,  # default 5e-5
+        "save_steps": 5000,
+        #"output_dir": output_dir,
+        "warmup_steps": 2000,
+        #"best_model_dir": output_dir + "/best_model/"
+    }
+    model = ClassificationModel("bert", model_path, num_labels=2, args=train_args)
+    print(model.device)
+    return model
+
+def run():
+    """
+    !!!ON WINDOWS run() MUST BE CALLED FROM __main__!!!
+    Details here: https://docs.python.org/2/library/multiprocessing.html#windows
+    """
+    torch.multiprocessing.freeze_support()
+    print('loop')
 
 def get_followers(sql: str, download_limit = 12500000) -> None:
     """
@@ -135,7 +182,8 @@ def user_analyse_launcher(iterations: int, sql: str, model_path) -> None:
     #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
 
     #TFIDF_pol_unpol_conv, Algo_pol_unpol = pickle_file_load_launcher(TFIDF_pol_unpol_conv_path, Algorithm_pol_unpol_path)
-    BERT_model = inference_political_bert.load_model(model_path)
+    #BERT_model = inference_political_bert.load_model(model_path)
+    BERT_model = init(model_path)
 
     # Name of temp table in DB. Is deleted at the end of this function
     table_name = 'temp_result'
@@ -146,115 +194,10 @@ def user_analyse_launcher(iterations: int, sql: str, model_path) -> None:
         # analyse hashtags and write result to DB
         update_sql = f"update n_users set lr = lr_text, lr_conf = cast (a.lr_conf as numeric), pol = pol_text, " \
                      f"pol_conf = cast (a.pol_conf as numeric), lr_pol_last_analysed = analyse_date from {table_name} " \
-                     f"" \
-                     f"" \
-                     f"" \
                      f"a where id = cast(user_id as bigint)"
         db_functions.update_table(update_sql)  # update n_users table with new resulsts
         gc.collect()
 
-
-def prediction_launcher(table_name: str, BERT_model, sql: str,
-                        write_to_db: bool = True, TFIDF_pol_unpol_conv = 0, Algo_pol_unpol = 0):
-    """
-    Loads 200 Tweets (one page call) per users and sends them to BERT for inference
-    :param table_name: Name of temp table used to store results
-    :param BERT_model: BERT Model
-    :param sql: Statement providing Users to be inferenced
-    :param write_to_db: True or False
-    :param TFIDF_pol_unpol_conv: tfidf converter (optional)
-    :param Algo_pol_unpol: Random Forrest classifier (optional)
-    :return:
-    """
-    start_time_overal = time.time()
-    cur_date = str(date.today())  # date for last seen columns
-    #methods = ['pol', 'LR']
-    methods = ['LR']
-    data = []
-
-    # This DF will store all precditions results
-    df_pred_data = pd.DataFrame(data,
-                                columns=['user_id', 'screen_name', 'pol', 'unpol', 'pol_text', 'pol_conf', 'pol_time',
-                                         'left', 'right', 'lr_text', 'lr_conf', 'lr_time', 'analyse_date'])
-
-    sql_time_start = time.time()
-    df = db_functions.select_from_db(sql)
-    print(f"##############  --- SQL Select time : {sql_time_start - time.time()} --- #############")
-    if df.shape[1] != 2:
-        print("ERROR: DF must ONLY have columns user_id and username")
-        gc.collect()
-        sys.exit()
-    gc.collect()
-
-    for index, element in tqdm(df.iterrows(), total=df.shape[0]):
-        start_time = time.time()
-        user_id = element[0]
-        screen_name = element[1]
-        df_tweets = TwitterAPI.API_tweet_multitool(user_id, 'temp', pages=1, method='user_timeline', append=False,
-                                                   write_to_db=False)  # fills DF with 200 tweets of 1 page
-        if len(df_tweets) < 100:  # user has less then 100 tweets
-            db_functions.update_to_invalid(cur_date, user_id)
-            continue
-        if isinstance(df_tweets, str):  # if df_tweets is a string it contains an error message
-            db_functions.update_to_invalid(cur_date, user_id)
-            continue
-
-        german_language = helper_functions.lang_detect(df_tweets)
-        if german_language is False:
-            db_functions.update_to_invalid(cur_date, user_id)
-            continue
-
-        for method in methods:
-            prediction_result = []
-            if method == 'pol':
-                if TFIDF_pol_unpol_conv == 0 or Algo_pol_unpol == 0:
-                    print ("Warning: No Political/Unpolitical classifier given. Check function parameters.")
-                else:
-                    prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], TFIDF_pol_unpol_conv, Algo_pol_unpol))
-            if method == 'LR':
-                prediction_result.append(inference_political_bert.bert_predictions(df_tweets['tweet'], BERT_model))
-            runtime = int(time.time() - start_time)
-
-            # returns text interpretation of inference
-            text, conf = helper_functions.conf_value(method, prediction_result)
-
-            # result and confidence score
-            df_pred_data.at[index, 'user_id'] = user_id
-            df_pred_data.at[index, 'screen_name'] = screen_name
-            df_pred_data.at[index, 'analyse_date'] = cur_date
-
-            # TODO: If you store the column names in variables that update depending on the method, you only need
-            #  one block
-            pred_result_zero = 'left' if method == "LR" else 'pol'
-            pred_result_one = 'right' if method == "LR" else 'unpol'
-            df_pred_data.at[index, pred_result_zero] = prediction_result[0][0]
-            df_pred_data.at[index, pred_result_one] = prediction_result[0][1]
-
-            if method == "LR":
-                df_pred_data.at[index, 'left'] = prediction_result[0][0]
-                df_pred_data.at[index, 'right'] = prediction_result[0][1]
-                df_pred_data.at[index, 'lr_text'] = text
-                df_pred_data.at[index, 'lr_conf'] = conf
-                df_pred_data.at[index, 'lr_time'] = runtime
-            else:
-                df_pred_data.at[index, 'pol'] = prediction_result[0][0]
-                df_pred_data.at[index, 'unpol'] = prediction_result[0][1]
-                df_pred_data.at[index, 'pol_text'] = text
-                df_pred_data.at[index, 'pol_conf'] = conf
-                df_pred_data.at[index, 'pol_time'] = runtime
-    print("screen_name,Pol,Unpol,Pol_Time,Left,Right,LR_Time")
-    for index, element in df_pred_data.iterrows():
-        print(
-            f"{element['user_id']},{element['screen_name']},{element['pol']}"
-            f",{element['unpol']},{element['pol_time']},{element['left']},{element['right']},{element['lr_time']}")
-    print("\n")
-
-    if write_to_db is True:
-        db_functions.df_to_sql(df_pred_data, table_name, drop='replace')
-        print(f"Data written to table: {table_name}.")
-    runtime = time.time() - start_time_overal
-    print(f"Runtime: {runtime}")
-    return df_pred_data
 
 
 def get_friends(sql: str):
@@ -456,6 +399,108 @@ def get_BERT_friends_scores_from_friends(sql: str, min_required_bert_friend_opin
     db_functions.drop_table('temp_scores_table')
 
 
+def prediction_launcher(table_name: str, BERT_model, sql: str,
+                        write_to_db: bool = True, TFIDF_pol_unpol_conv = 0, Algo_pol_unpol = 0):
+    """
+    Loads 200 Tweets (one page call) per users and sends them to BERT for inference
+    :param table_name: Name of temp table used to store results
+    :param BERT_model: BERT Model
+    :param sql: Statement providing Users to be inferenced
+    :param write_to_db: True or False
+    :param TFIDF_pol_unpol_conv: tfidf converter (optional)
+    :param Algo_pol_unpol: Random Forrest classifier (optional)
+    :return:
+    """
+    start_time_overal = time.time()
+    cur_date = str(date.today())  # date for last seen columns
+    #methods = ['pol', 'LR']
+    methods = ['LR']
+    data = []
+
+    # This DF will store all precditions results
+    df_pred_data = pd.DataFrame(data,
+                                columns=['user_id', 'screen_name', 'pol', 'unpol', 'pol_text', 'pol_conf', 'pol_time',
+                                         'left', 'right', 'lr_text', 'lr_conf', 'lr_time', 'analyse_date'])
+
+    sql_time_start = time.time()
+    df = db_functions.select_from_db(sql)
+    print(f"##############  --- SQL Select time : {sql_time_start - time.time()} --- #############")
+    if df.shape[1] != 2:
+        print("ERROR: DF must ONLY have columns user_id and username")
+        gc.collect()
+        sys.exit()
+    gc.collect()
+
+    for index, element in tqdm(df.iterrows(), total=df.shape[0]):
+        start_time = time.time()
+        user_id = element[0]
+        screen_name = element[1]
+        df_tweets = TwitterAPI.API_tweet_multitool(user_id, 'temp', pages=1, method='user_timeline', append=False,
+                                                   write_to_db=False)  # fills DF with 200 tweets of 1 page
+        if len(df_tweets) < 100:  # user has less then 100 tweets
+            db_functions.update_to_invalid(cur_date, user_id)
+            continue
+        if isinstance(df_tweets, str):  # if df_tweets is a string it contains an error message
+            db_functions.update_to_invalid(cur_date, user_id)
+            continue
+
+        german_language = helper_functions.lang_detect(df_tweets)
+        if german_language is False:
+            db_functions.update_to_invalid(cur_date, user_id)
+            continue
+        for method in methods:
+            prediction_result = []
+            if method == 'pol':
+                if TFIDF_pol_unpol_conv == 0 or Algo_pol_unpol == 0:
+                    print ("Warning: No Political/Unpolitical classifier given. Check function parameters.")
+                else:
+                    prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], TFIDF_pol_unpol_conv, Algo_pol_unpol))
+            if method == 'LR':
+                #prediction_result.append(inference_political_bert.bert_predictions(df_tweets['tweet'], BERT_model))
+                prediction_result.append(bert_predictions(df_tweets['tweet'], BERT_model))
+            runtime = int(time.time() - start_time)
+
+            # returns text interpretation of inference
+            text, conf = helper_functions.conf_value(method, prediction_result)
+
+            # result and confidence score
+            df_pred_data.at[index, 'user_id'] = user_id
+            df_pred_data.at[index, 'screen_name'] = screen_name
+            df_pred_data.at[index, 'analyse_date'] = cur_date
+
+            # TODO: If you store the column names in variables that update depending on the method, you only need
+            #  one block
+            pred_result_zero = 'left' if method == "LR" else 'pol'
+            pred_result_one = 'right' if method == "LR" else 'unpol'
+            df_pred_data.at[index, pred_result_zero] = prediction_result[0][0]
+            df_pred_data.at[index, pred_result_one] = prediction_result[0][1]
+
+            if method == "LR":
+                df_pred_data.at[index, 'left'] = prediction_result[0][0]
+                df_pred_data.at[index, 'right'] = prediction_result[0][1]
+                df_pred_data.at[index, 'lr_text'] = text
+                df_pred_data.at[index, 'lr_conf'] = conf/100
+                df_pred_data.at[index, 'lr_time'] = runtime
+            else:
+                df_pred_data.at[index, 'pol'] = prediction_result[0][0]
+                df_pred_data.at[index, 'unpol'] = prediction_result[0][1]
+                df_pred_data.at[index, 'pol_text'] = text
+                df_pred_data.at[index, 'pol_conf'] = conf
+                df_pred_data.at[index, 'pol_time'] = runtime
+    print("screen_name,Pol,Unpol,Pol_Time,Left,Right,LR_Time")
+    for index, element in df_pred_data.iterrows():
+        print(
+            f"{element['user_id']},{element['screen_name']},{element['pol']}"
+            f",{element['unpol']},{element['pol_time']},{element['left']},{element['right']},{element['lr_time']}")
+    print("\n")
+
+    if write_to_db is True:
+        db_functions.df_to_sql(df_pred_data, table_name, drop='replace')
+        print(f"Data written to table: {table_name}.")
+    runtime = time.time() - start_time_overal
+    print(f"Runtime: {runtime}")
+    return df_pred_data
+
 if __name__ == '__main__':
     ###setup (not recurring)
 
@@ -486,8 +531,9 @@ if __name__ == '__main__':
 
     # Give LR ratings to accounts with many followers (Bert inference for big users who have not yet a self Bert score)
     #sql = "select distinct id as user_id, screen_name as username from n_followers fo, n_users u where fo.user_id = u.id and lr is null"
-    #model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
-    #user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
+    sql = "select id as user_id, screen_name as username from n_users where id = 4767806597"
+    model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
 
     ###improve L/R rated user base for better predictions
     #Give LR rating to accounts that FOLLOW many accounts that are in n_followers (Bert inference for users in n_users without self_Bert score, who follow at least 100 Big Users)
@@ -503,9 +549,14 @@ if __name__ == '__main__':
     ###New hashtag download (recurring)
     #Downloads entire hashtag and saves it to DB in table s_h_HASHTAG_TIMESTAMP
     # hashtag = "150JahreVaterland"
-    # since = '2021-01-14'
+    # since = '2021-01-18'
     # until = '2021-01-20'
-    # sn_scrape.hashtag_download_launcher(hashtag=hashtag, since=since, until = '2021-01-20')
+    # table_name = sn_scrape.hashtag_download_launcher(hashtag=hashtag, since=since, until = until)
+    #insert new users into table n_users
+    # new_users = f"""insert into n_users (id)
+    # select f.user_id from {table_name} f  left join n_users u on f.user_id = u.id
+    # where u.id is null and f.user_id is not null"""
+    # db_functions.update_table(new_users)
 
     #Download friends of hashtag users, unless we already have their friends
     # hashtag = "150JahreVaterland"
@@ -514,22 +565,22 @@ if __name__ == '__main__':
 
     #Give Bert LR-self rating to all new users in hashtag
     #The LR-self rating is based on the users tweets
-    hashtag = "150JahreVaterland"
-    #hashtag = 'le0711'
-    #hashtag = 'b2908'
+    #hashtag = "150JahreVaterland"
+    # hashtag = 'le0711'
+    # hashtag = 'b2908'
     #To Do: improve Long SQL runtime
-    sql = f"""
-    SELECT DISTINCT u.id AS user_id, screen_name AS username
-    FROM n_users u, facts_hashtags fh,
-    (SELECT follows_ids,COUNT (follows_ids) FROM n_followers f GROUP BY follows_ids HAVING COUNT (follows_ids) >= 100) a
-    WHERE CAST (a.follows_ids AS bigint) = u.id
-    AND lr IS NULL
-    AND fh.user_id = u.id
-    AND fh.from_staging_table like '%{hashtag}%'
-    --limit 200
-    """
-    model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
-    user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
+    # sql = f"""
+    # SELECT DISTINCT u.id AS user_id, screen_name AS username
+    # FROM n_users u, facts_hashtags fh,
+    # (SELECT follows_ids,COUNT (follows_ids) FROM n_followers f GROUP BY follows_ids HAVING COUNT (follows_ids) >= 100) a
+    # WHERE CAST (a.follows_ids AS bigint) = u.id
+    # AND lr IS NULL
+    # AND fh.user_id = u.id
+    # AND fh.from_staging_table like '%{hashtag}%'
+    # --limit 200
+    # """
+    # model_path = r"F:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
+    # user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
 
     # Overwrite / Refresh LR-self rating for all users of a hashtag
     #sql = f"select distinct u.id AS user_id, screen_name AS username  from facts_hashtags f, n_users u where f.hashtags = '{hashtag}' and f.user_id = u.id and u.lr is null"
@@ -537,6 +588,7 @@ if __name__ == '__main__':
 
     #Refreshes LR-friend rating for all users in hashtag who have a Bert LR rating and follow someone in n_followers
     #The LR-friend rating is based on the LR-self rating of account a user follows
+    # hashtag = "150JahreVaterland"
     #hashtag = 'le0711'
     # hashtag = 'b2908'
     # sql = f"""
@@ -576,7 +628,6 @@ if __name__ == '__main__':
     #     FROM facts_hashtags f
     #     WHERE from_staging_table like '%{hashtag}%')
     # """
-    #test_sql = "SELECT id,     screen_name,       lr,       lr_conf,       result_bert_friends,       bert_friends_conf,       bf_left_number,       bf_right_number  from n_users where id = 843210563190771713"
     # combined_scores_calc_launcher(sql, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off, min_required_bert_friend_opinions)
 
     # Counts how many left or right friends a user has. Unlike seamingly similar functions (who download and analyse tweets),
@@ -613,7 +664,6 @@ if __name__ == '__main__':
     #     (SELECT DISTINCT f.user_id
     #      FROM facts_hashtags f
     #      WHERE from_staging_table like '%{hashtag}%')"""
-    #
     # combined_scores_calc_launcher(sql, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off,
     #                               min_required_bert_friend_opinions)
 
@@ -626,5 +676,15 @@ if __name__ == '__main__':
     # WHERE from_staging_table like '%{hashtag}%'
     #   AND f.user_id = u.id
     #   AND combined_rating in ('links', 'rechts')"""
-    #
     # print (db_functions.select_from_db(sql))
+
+    #download/refresh n_users details for the users in list
+    # df = db_functions.select_from_db("select distinct u.id from v_jahrevaterland v, n_users u where v.user_id = u.id and (date like '%2021-01-18 10%') and v.combined_rating <> 'right wing'")
+    # for element in df.iterrows():
+    #     TwitterAPI.API_get_single_user_object(element[1][0])
+
+
+    # run()
+    # model = init()
+    # data = bert_predictions("das ist ein Test tweet", model)
+    # print(data)

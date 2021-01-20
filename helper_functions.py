@@ -311,6 +311,20 @@ def add_eval_user_tweets(moderate_ids, right_ids, table_name = 'eval_table'):
 
     print ("Bing")
 
+def check_DB_users_existance(id):
+    """
+    Checks if a user is already present in table n:users
+    :param id: User Id as number or string (string is preferable)
+    :return: True is user exists, False if not
+    """
+    df = db_functions.select_from_db(f"select * from n_users where id = {id}")
+    assert (len(df) <= 1),f"ERROR: Duplicate row in n_users found. Check User ID {id}"
+    if len(df) == 1:
+        return True
+    elif len (df) == 0:
+        return False
+
+
 if __name__ == "__main__":
-    add_eval_user_tweets()
+    print (check_DB_users_existance(16745492))
 

@@ -5,6 +5,7 @@ import pandas as pd
 from tweepy import OAuthHandler, TweepError
 import API_KEYS
 import db_functions
+import helper_functions
 
 API_KEY = API_KEYS.API_KEY
 API_KEY_Secret = API_KEYS.API_KEY_Secret
@@ -341,3 +342,56 @@ def API_Friends(user_id: str, screen_name: str):
     #Insert friends into table
     db_functions.insert_to_table_followers_or_friends(df, table_name = 'n_friends', username = True)
     return len(df)
+
+def API_get_single_user_object(user_id):
+    """
+    Uses Api to fetch user details for given ID
+    :param user_id:
+    :return: nothing
+    """
+    time.sleep(0.75)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    connection = db_functions.db_connect()
+    cursor = connection.cursor()
+    try:
+        user = api.get_user(user_id)
+    except TweepError as e:
+        if "User not found" in str(e):
+            return "Error: User not found"
+        elif "User has been suspended" in str(e):
+            return "Error: User has been suspended"
+        else:
+            print(e)
+            return (e)
+    v1 = int(user['id'])
+    v2 = user['name']
+    v3 = user['screen_name']
+    v4 = user['location']
+    try:
+        v5 = user['profile_location']['full_name']
+    except TypeError:
+        v5 = user['profile_location']
+    v6 = int(user['followers_count'])
+    v7 = int(user['friends_count'])
+    v8 = int(user['listed_count'])
+    v9 = user['created_at']
+    v10 = int(user['favourites_count'])
+    v11 = user['verified']
+    v12 = int(user['statuses_count'])
+    v13 = str(timestamp)
+    user_exists_already = helper_functions.check_DB_users_existance(v1)
+    if user_exists_already:
+        sql = f"""update n_users set id = {v1}, name = '{v2}', screen_name = '{v3}', location = '{v4}', profile_location = '{v5}',
+                followers_count = {v6}, friends_count = {v7}, listed_count = {v8}, created_at = '{v9}', favourites_count = {v10},
+                verified = {v11}, statuses_count = {v12}, last_seen = '{v13}' where id = {v1}"""
+        db_functions.update_table(sql)
+        # sql = "INSERT INTO public.n_users(id, name, screen_name, location, profile_location, followers_count, friends_count, listed_count, created_at, favourites_count, verified, statuses_count, last_seen) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"
+        #cursor.execute(sql)
+    else:
+        sql = """INSERT INTO public.n_users(id, name, screen_name, location, profile_location, followers_count,
+            friends_count, listed_count, created_at, favourites_count, verified, statuses_count, last_seen)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"""
+        cursor.execute(sql, (v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13))
+    connection.commit()
+    cursor.close()
+    return v3

@@ -5,11 +5,17 @@ import pandas as pd
 from simpletransformers.classification import ClassificationModel
 import time
 from tqdm import tqdm
+import torch
 from transformers import logging
 import TwitterAPI
 import db_functions
 from helper_functions import lang_detect
 
+#torch.multiprocessing.freeze_support()
+
+def run():
+    torch.multiprocessing.freeze_support()
+    print('loop')
 
 def bert_predictions(tweet: pd.DataFrame, model: ClassificationModel):
     """
@@ -18,8 +24,11 @@ def bert_predictions(tweet: pd.DataFrame, model: ClassificationModel):
     :param model: Bert Model
     :return: list of pr
     """
-    predictions, raw_outputs = model.predict(tweet)
-    auswertung = collections.Counter(predictions)
+    try:
+        predictions, raw_outputs = model.predict(tweet)
+        auswertung = collections.Counter(predictions)
+    except:
+        return [[0, 0]]
     return auswertung
 
 
@@ -28,19 +37,23 @@ def load_model(model_name):
     logging.set_verbosity_warning()
 
     # define hyperparameter
-    # train_args = {"reprocess_input_data": True,
-    #               "fp16": False,
-    #               "num_train_epochs": 11,
-    #               "overwrite_output_dir": True}
+    train_args = {"reprocess_input_data": True,
+                  "fp16": False,
+                  "num_train_epochs": 11,
+                  "overwrite_output_dir": True}
 
     #model = ClassificationModel("bert", model_name, num_labels=2, args=train_args)
-    model = ClassificationModel("bert", model_name, num_labels=2)
-    
+    #model = ClassificationModel("bert", model_name, num_labels=2)
+
+    #added during repair #no difference
+    dir = "F:\AI\outputs\political_bert_1605652513.149895\checkpoint-485000"
+    model = ClassificationModel("bert", dir, num_labels=2, args=train_args, cuda_device=0)
+
     print(model.device)
     return model
 
 
-def eval_bert() -> None:
+def eval_bert(model_path) -> None:
     """
     Runs evaluation against evaluation accounts in table "eval_table"
     Return a printout of the results

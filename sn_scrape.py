@@ -61,7 +61,7 @@ def hashtag_download_launcher(hashtag, since: str, until: str):
     :param hashtag: hashtag, to be downloaded
     :param since: start date for tweet download (string)
     :param until: until date for tweet download (string)
-    :return: none
+    :return: table_name
     """
     table_name, hashtag, len_df = SN_db_operations(hashtag, since, until)
     print("Hashtag Twitter ID download complete. Starting detail download.")
@@ -69,4 +69,5 @@ def hashtag_download_launcher(hashtag, since: str, until: str):
     for i in tqdm(range(int(len_df / bulk_size + 1))):
         TwitterAPI.tweet_details_download_launcher(table_name, hashtag, bulk_size)
     print("Hashtag downloaded successfully.")
+    return table_name
 
