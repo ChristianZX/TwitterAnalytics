@@ -56,6 +56,7 @@ five-step process. Each step is described below:
 [High_Level_Process]: https://github.com/ChristianZX/TwitterAnalytics/blob/master/images/HighLevelProcess.PNG "High Level Process"
 
 **Step 1) Fine-Tune BERT**
+
 Basis of the user analysis is a German BERT neural network. It was trained on German language and fine tuned
 by me on political tweets. For this purpose, it read 200,000 tweets of different users, which were
 previously annotated as moderate or right-wing populist. Whole accounts were annotated as right-wing
@@ -67,23 +68,38 @@ its text is right-wing populist or moderate. Because the significance of a singl
 [BERT_Training]: https://github.com/ChristianZX/TwitterAnalytics/blob/master/images/BertTraining.PNG "BERT Training"
 
 **Step 2) Download 200 Million Followers**
+
 The mass of Twitter accounts has relatively few followers, while celebrities or well-known politicians have many.
 In step 2 I downloaded 200 million followers from about 3,000 popular accounts. For example,
 leading green party politician Annalena Baerbock, who (as of January 2021) has 108,000 followers.
 
-**Step 3) Read Friend Tweets**
+**Step 3a) Read Friend Tweets (initial  approach)**
+
 The German BERT AI reads 200 tweets from each of the 3,000 accounts and forms an opinion whether
 the account is moderate or right-wing. In the case of Ms. Baerbock, it classifies 184 tweets as
 moderate and 16 as right-wing. This leads to a confidence value of 84% (200/200 = 100%, 100/200 = 0%).
+**So this approach simply counts friends in both classes.** 
 This is a fairly high confidence and earns her 365th place out of 24,199 accounts that got a moderate
 personal rating.
+This approach will produce quite good results with a relatively few (3.000) BERT self ratings.  
+
+**Step 3b) Read Friend Tweets (AI based approach)**
+
+In step 3b, a Random Forest classifier can be trained. However, the training matrix consisted of the 3000 follower-rich 
+accounts (as columns) and 140.000 (70k left, 70k right) users in the rows who had
+* a rating with a high to very high confidence 
+* followed at least 5 of the 3000 users
+
+Accuracy of 3b is substantially better than of 3a, but it needs more and better data as input.    
 
 **Step 4) Read the Average Users' Tweets**
+
 Reading and classifying tweets is possible for any account that has enough German tweets (at least 75%).
 Let’s imagine the account of Max Mustermann (the german John Doe) to be moderate after this first analysis,
 with a confidence of 70%.
 
 **Step 5) Calculate Combined Score**
+
 The process now searches for Max Mustermann in the 200 million downloaded followers of the 3,000 large accounts.
 Twitter refers to the accounts found in this way as Max Mustermann's friends.
 Max Mustermann is found as a follower on Ms. Baerbock and Netzpolitik. Both accounts are moderate.
@@ -106,6 +122,7 @@ The following chart describes the possible cases:
 
 
 **Step 6 of 5) Optional**
+
 The 200 million followers currently available are too few to calculate a good Friend Rating for
 a high percentage of users. To be able to estimate as many users of a hashtag as possible,
 I download the list of their friends directly if necessary,, in contrast to the indirect approach
@@ -126,141 +143,97 @@ downloaded per hour.
 That's why downloading friends is only a last resort.
 
 ## Usage
-**Note: Parametrization via JSON config files is still work in progress**
 
+The process is controlled by the `config.ini`. To execute a task, set its value in chapter 
+`[SETUP]` or `[TASKS]` to `True`. All tasks that are set to `True` will be executed successively. 
+ 
 1. Get yourself a key for the [Twitter API](https://developer.twitter.com/en/apply-for-access)
-2. Install [Postgres SQL](https://www.postgresql.org/download/)
-3. Configure DB API Keys and DB connection in `API_KEYS_Template.py` and `db_function.py.db_connect()` and rename
+2. Install [PostgreSQL](https://www.postgresql.org/download/)
+3. Configure DB API keys and DB connection in `API_KEYS_Template.py` and `db_function.py.db_connect()` and rename
    `API_KEYS_Template.py` to `API_KEYS.py`.
 4. Run `dwh_setup.py` to create tables `n_users`, `n_followers`, `n_friends`, `facts_hashtags` and `eval_table`
-5. Create lists of moderate and right wing accounts. Use `TWA_main.py.download_user_timelines()` to download them.
-    ````python
-    download_user_timelines(political_moderate_list, right_wing_populists_list)
+5. The next step is to download training data for the BERT AI. Open `config.ini` and in `[SETUP]`, set `download_BERT_training_data = True`. In chapter `[DOWNLOAD_BERT_TRAINING_DATA]` of the ini file,
+configure account names (Twitter screen names) in lists `political_moderate_list` and `right_wing_populists_list`.
+Afterwards excute TWA_main.py with paramater `--name config.ini`    
+6. Configure `train_political_bert.py` and run BERT training. Training is not configurable via `config.ini` and needs 
+    to be run from `train_political_bert.py`. The training will run some hours and needs to be aborted manually. 
+    Otherwise, it will run for the configured number of epochs.      
+7. Download all tweets tagged with a hashtag by setting `download_hashtag = True`. Configuration example for download 
+    settings:
+    ````ini
+    [GLOBAL]
+    hashtag = trump 
+    [DOWNLOAD_HASHTAG]
+    since = 2021-01-25
+    until = 2021-01-31
     ````
-6. Configure `train_political_bert.py` and run BERT Training
-7. After BERT Training configure `inference_political_bert`.
-8. Download hashtag of your choosing
-9. Copy downloaded tweets you want to keep into table facts_hashtags:
+8. Copy downloaded tweets you want to keep into table `facts_hashtags`:
     ````sql
     insert into facts_hashtags 
     select index, id, conversation_id, 0 as created_at, date, tweet, hashtags, user_id, username,
     name, link, False as retweet, nlikes, nreplies, nretweets, quote_url, user_rt_id, user_rt, staging_name 
     from STAGING_TABLE_NAME
     ````
-10. Use BERT to give each user in a hashtag a rating based on their 200 latest tweets. This will store actual results 
-    for your users in DB table `n_users`. At this point the results will be much better then guessing but still have low 
+   This is a manual operation. The name of the staging table is returned during the process.
+9. Use BERT to give each user in a hashtag a rating based on their 200 latest tweets. This will store results 
+    for your users in DB table `n_users`. At this point the results will be much better than guessing but still have low 
     accuracy, low recall and low precision.
-    ````python
-    sql = "select distinct user_id, username from facts_hashtags"
-    model_path = r"C:\YOUR_PATH\YOUR_CHECKPOINT"
-    #Example: model_path = r"C:\AI\outputs\political_bert_1605652513.149895\checkpoint-480000"
-    user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
-    ````
-11. Create an evaluation set to calculate accuracy.
-    ````python
-    # Annotate users and write result into column eval_table.lr
-    helper_functions.add_eval_user_tweets(moderate_ids, right_ids)
-    TWA_Main.eval_bert(model_path)
-    ```` 
-    This will download the tweets of the evaluation users into `eval_table`. Without the tweets
-    you can't do consistent evaluations since the users latest 200 tweets change constantly.  
-12. Download some friends. During initial setup it makes sense to download the friends of a portion of your hashtag 
+    In the ini file, set the task `calculate_BERT_self_rating = True` (and `download_BERT_training_data = True`),
+    and in `[CALCULATE_BERT_SELF_RATING]`, set `model_path = path of your BERT checkpoint folder`, `iterations` 
+    (divides the dataset into n batches, so use 1 for small datasets of up to 500 users, and f.i. 10, if you want to 
+    split 5,000 items into 10 batches of 500). For the initial inference, I suggest to use this SQL statement instead 
+    of the pre-configured one (for recurring runs) in the same section: `select u.id AS user_id, screen_name AS username from n_users`
+10. Use `download_BERT_training_data` to download users and their tweets to `eval_table`. 
+    Afterwards, set `rate_eval_table_accounts = True` in `config.ini` to rate these accounts. Then annotate each user manually
+    in column `eval_table.lr` to determine how many results were predicted correctly.
+    It's important to save the users' tweets in the `eval_table`. Without them, you can't do consistent evaluations since the users latest 200 tweets change constantly.  
+12. Download some friends. During initial setup, it makes sense to download the friends of a portion of your hashtag 
     users. It allows you to identify people they commonly follow and download the followers of these accounts. 
     Consider keeping the number of friends to download low. Twitter allows only 1 download per minute.
-    ````python
-    sql = "select distinct user_id from facts_hashtags limit 1000"
-    TWA_main.get_friends(sql)
-    ```` 
+    ````ini
+    [TASKS]
+    download_friends = True
+    [GLOBAL]
+    hashtag = trump
+    [DOWNLOAD_FRIENDS]
+    sql = SELECT distinct f.user_id
+    FROM facts_hashtags f
+    left join n_friends fr on f.user_id = fr.user_id
+    left join n_users u on f.user_id = u.id
+    WHERE from_staging_table like 'INSERT_HASHTAG'
+    and fr.user_id is null and u.private_profile is null
+    ````
 13. Run follower download. The Twitter API downloads 300.000 followers per hour. You will need many millions. So this 
     will take a while. Finding good accounts to download followers from is tricky. Common friends of your hashtag users
     should be a good place to start.
-    ````python
-    sql = """
-    select follows_ids from n_friends
-    group by follows_ids
-    having count(follows_ids) >= 10
-    order by count(follows_ids) desc
-    """
-    TWA_main.get_followers(sql)
+    ````ini
+    [TASKS]
+    download_followership = True
+    [GLOBAL]
+    hashtag = trump
+    [DOWNLOAD_FOLLOWERSHIP]
+    user_ids = select follows_ids as id from
+        (select fr.follows_ids, count(fr.follows_ids)
+        from facts_hashtags f, n_friends fr
+        where from_staging_table like 'INSERT_HASHTAG' and f.user_id = fr.user_id
+        group by fr.follows_ids
+        having count(fr.follows_ids) >= 500
+        order by count(fr.follows_ids) desc) a
+      except select cast (user_id as text) from n_followers
+    download_limit = 12500000
+    sql_insert =  insert into n_users (id) select distinct user_id from n_followers except select id from n_users
     ````
-14. Configure and run friend score and combined score calculation:
-    ````python
-    sql = """
-    SELECT DISTINCT u.id AS user_id, screen_name AS username 
-    FROM n_users u," 
-        (SELECT follows_ids, COUNT (follows_ids) 
-        FROM n_followers f 
-        GROUP BY follows_ids 
-        HAVING COUNT (follows_ids) >= 100) a, 
-        facts_hashtags fh
-        WHERE CAST (a.follows_ids AS bigint) = u.id 
-        AND lr IS NULL 
-        AND fh.user_id = u.id) 
-    """
+    Alternatively you can use a list of user_ids: `user_ids = [29180690,805308596,4052291878]`
+14. Calculate BERT friend rating by following the configuration example in `CALCULATE_BERT_FRIEND_RATING` 
+15. Calculate BERT ML rating as described in `[CALCULATE_ML_FRIEND_RATING]` 
+16. Calculate combined score from self rating, friend rating and friend ML rating as described in `[CALCULATE_COMBINED_RATING]`
 
-    model_path = r"YOUR_MODE_PATH"
-    user_analyse_launcher(iterations=1, sql=sql, model_path=model_path)
-    
-    bert_friends_high_confidence_capp_off = 0.70
-    self_conf_high_conf_capp_off = 0.70
-    min_required_bert_friend_opinions = 10
-    
-    sql = """
-    SELECT id, screen_name, lr, lr_conf, result_bert_friends, bert_friends_conf, bf_left_number,bf_right_number
-    FROM n_users
-    WHERE (lr IS NOT NULL
-    OR result_bert_friends IS NOT NULL)
-    AND combined_rating IS NULL
-    """
-    combined_scores_calc_launcher(
-        sql, 
-        bert_friends_high_confidence_capp_off, 
-        self_conf_high_conf_capp_off, 
-        min_required_bert_friend_opinions
-    )
-    
-    #Run combined_scores for users that got a friend rating after downloading their friends directly
-    sql = f"""
-    SELECT id, screen_name, lr, lr_conf, result_bert_friends, bert_friends_conf, bf_left_number, bf_right_number
-    FROM n_users
-    WHERE (lr IS NOT NULL
-    OR result_bert_friends IS NOT NULL)
-    AND combined_rating IS NULL
-    AND id in (SELECT DISTINCT f.user_id FROM facts_hashtags f)
-    """
-    get_combined_scores_from_followers(sql)
-    ````
-    
-15. Print number of newly found results
-    ````python
-    sql = f"""
-    SELECT COUNT (DISTINCT u.id)
-    FROM facts_hashtags f, n_users u
-    WHERE f.user_id = u.id
-    AND combined_rating in ('links','rechts')"""
-    print (db_functions.select_from_db(sql))
-    ````
-16. Re-run evaluation vs. combined score. Below statement gives you the number of correct evaluations using a confidence cut off at 70%.  
-    ````python
-    sql = f"""
-    select distinct e.user_id, e.username, e.lr, e.pol, u.combined_rating, u.combined_conf
-    from eval_table e, n_users u
-    where 1=1
-    and e.lr is not null
-    and e.user_id <> ''
-    and u.id = cast (e.user_id as bigint)
-    and u.combined_conf >= 0.7
-    and e.lr = u.combined_rating
-    """ 
-    print (db_functions.select_from_db(sql))
-    ```` 
 
 ## Future Plans  
-* create setup.py
-* Parametrization via JSON config files is still work in progress
 * Improve German BERT Training: Analyse individual tweets of each training set and use only those for training, that have a high confidence.
+* Include a Topic Model
 * If between 50% and 75% of user Tweets are german continue loading tweets until 200 are german have been downloaded.
-* Train englisch BERT to give self rating to englisch account and improve Friend-Rating.
+* Train english BERT to give self rating to englisch account and improve Friend-Rating.
 * Stop language detection if 100% of the first 50 Tweets are german, if this improves performance significantly.
 * Run statistical test for hashtag analysis: Assuming moderate and right accounts have an accuracy of 90%, to what degree do classification mistakes cancel out each other during hashtag analysis?
 * Learn to detect left extremists to eventually identify three classes: right, moderate, left.

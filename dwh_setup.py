@@ -19,17 +19,8 @@ CREATE TABLE public.{table_name}
     verified character varying COLLATE pg_catalog."default",
     statuses_count bigint,
     last_seen character varying COLLATE pg_catalog."default",
-    gen1 bigint,
-    gen2 bigint,
     score_sum bigint,
     opinion_count bigint,
-    gen3 bigint,
-    gen1_aut bigint,
-    gen2_aut bigint,
-    gen3_aut bigint,
-    score_sum_aut bigint,
-    opinion_count_aut bigint,
-    ex_score numeric,
     ex_score_aut numeric,
     n_friends_count bigint,
     lr text COLLATE pg_catalog."default",
@@ -37,10 +28,6 @@ CREATE TABLE public.{table_name}
     pol text COLLATE pg_catalog."default",
     pol_conf numeric,
     lr_pol_last_analysed text COLLATE pg_catalog."default",
-    result_sai text COLLATE pg_catalog."default",
-    percent_filled_sai numeric,
-    probability_sai text COLLATE pg_catalog."default",
-    last_seen_sai text COLLATE pg_catalog."default",
     result_bert_friends text COLLATE pg_catalog."default",
     bert_friends_conf numeric,
     bert_friends_last_seen text COLLATE pg_catalog."default",
@@ -48,7 +35,12 @@ CREATE TABLE public.{table_name}
     bf_right_number integer,
     combined_rating text COLLATE pg_catalog."default",
     combined_conf numeric,
-    private_profile boolean
+    private_profile boolean,
+    batch integer,
+    bert_friends_ml_result text COLLATE pg_catalog."default",
+    bert_friends_ml_conf numeric,
+    bert_friends_ml_count integer,
+    bert_friends_ml_last_seen text COLLATE pg_catalog."default"
 )"""
 db_functions.update_table(sql_table)
 

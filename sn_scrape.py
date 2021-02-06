@@ -69,5 +69,11 @@ def hashtag_download_launcher(hashtag, since: str, until: str):
     for i in tqdm(range(int(len_df / bulk_size + 1))):
         TwitterAPI.tweet_details_download_launcher(table_name, hashtag, bulk_size)
     print("Hashtag downloaded successfully.")
+
+    #insert new users into table n_users
+    new_users = f"""insert into n_users (id)
+    select f.user_id from {table_name} f  left join n_users u on f.user_id = u.id
+    where u.id is null and f.user_id is not null"""
+    db_functions.update_table(new_users)
     return table_name
 

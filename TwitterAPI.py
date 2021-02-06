@@ -130,7 +130,6 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
         wait = False
     else:
         assert (method == 'search' or method == 'user_timeline' ), "Error: No known method given!"
-
     try:
         for fetched_tweets in tweepy.Cursor(api_method, query, count=count, tweet_mode='extended').pages(pages):
             for index in range(len(fetched_tweets)):
@@ -138,7 +137,12 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
                 conversation_id.append(0)
                 created_at.append(str(fetched_tweets[index].created_at))
                 date.append(str(fetched_tweets[index].created_at))
-                tweet.append(fetched_tweets[index].full_text)
+                try: #Checks if Tweet returns a retweet.
+                    at_user = getattr(getattr(getattr(fetched_tweets[index], 'retweeted_status'), 'user'), 'screen_name')
+                    tweet.append("RT @" + at_user + ": " + getattr(getattr(fetched_tweets[index], 'retweeted_status'),
+                                                                   'full_text'))
+                except AttributeError: #no retweet found
+                    tweet.append(fetched_tweets[index].full_text)
                 hashtags_sub = []
                 for i, element in enumerate (fetched_tweets[index].entities['hashtags']):
                     hashtags_sub.append(fetched_tweets[index].entities['hashtags'][i]['text'])
@@ -154,23 +158,27 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
                 quote_url.append(0)
                 user_rt_id.append(0)
                 user_rt.append(0)
-
             if wait is True:
                 time.sleep(20)
     # TODO: In case the error message is saved in variable e, print and return e?
     except TweepError as e:
         if "User not found" in str(e):
+            time.sleep(20) #error are handled so fast that sleep is required to avoid rate limit exhaustian
             return "Error: User not found"
         elif "status code = 401" in str(e):
+            time.sleep(20)
             print("Twitter error response: status code = 401")
             return "Twitter error response: status code = 401"
         elif "status code = 404" in str(e):
+            time.sleep(20)
             print("Error 404: Account does not exist (anymore?)")
             return "Error 404: Account does not exist (anymore)"
         elif "User has been suspended" in str(e):
+            time.sleep(20)
             print("Error: User has been suspended")
             return "Error: User has been suspended"
         else:
+            time.sleep(20)
             print(e)
             return ("Error")
 
@@ -279,7 +287,7 @@ def API_get_tweet_details(tweet_id: str, sleep: bool = True):
     if sleep is True:
         time.sleep(0.75) # Sleep time is fitted to Twitter API download limit (900 in 15 minutes)
     try:
-        tweet = api.get_status(tweet_id)
+        tweet = api.get_status(tweet_id,tweet_mode='extended')
     except TweepError as e:
         if "Not authorized" in str(e):
             # TODO: It would be cleaner to define the text in a variable since you use it twice
@@ -294,7 +302,7 @@ def API_get_tweet_details(tweet_id: str, sleep: bool = True):
             return "Undefined Error"
     date = datetime.strptime(tweet['created_at'], '%a %b %d %H:%M:%S +0000 %Y')
     date = date + timedelta(hours=1) #twitter delivers GMT. +1 to get it to CET
-    return tweet['user']['id'], date, tweet['text'], tweet['user']['name'], tweet['user']['screen_name'], \
+    return tweet['user']['id'], date, tweet['full_text'], tweet['user']['name'], tweet['user']['screen_name'], \
            tweet['in_reply_to_status_id'], tweet['in_reply_to_user_id'], tweet['in_reply_to_screen_name']
 
 

@@ -2,19 +2,23 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pandas.io.sql as sqlio
 import psycopg2
+import math
 from sqlalchemy import create_engine, Table, MetaData
 import sys
 import pickle
 import API_KEYS
 
 
-def df_to_sql(df: pd.DataFrame, tablename: str, drop="none"):
+def df_to_sql(df: pd.DataFrame, tablename: str, drop="none", bulk_size: int = 1000000):
     """
     Writes Dataframe to DB
     :param df: name of dataframe that will be written to DB
     :param tablename: tablename for DB
     :param drop: 'replace' , 'append' or False to raise error when table already exists
     """
+    if len (df) == 0:
+        print ("Error: Can't write to DB since file size is 0.")
+        sys.exit()
     engine, metadata = sql_alchemy_engine()
     if drop == "replace":
         drop_table(tablename)
@@ -22,10 +26,11 @@ def df_to_sql(df: pd.DataFrame, tablename: str, drop="none"):
     elif drop == "none":
         df.to_sql(tablename, con=engine)
     elif drop == "append":
-        df.to_sql(tablename, con=engine, index=False, if_exists='append')
+        df.to_sql(tablename, con=engine, index=False, if_exists='append', chunksize=bulk_size)
     else:
         print("Error raised by df_to_sql(): None of the write conditions (replace, drop, append) was met. "
               "Check function parameters!")
+        engine.dispose()
         sys.exit()
     engine.dispose()
 
@@ -143,10 +148,11 @@ def update_to_invalid(cur_date, user_id):
     Used for non-German tweets and tweets of deleted users
     :return:
     """
-    sql_invalid = f"update n_users set lr = 'invalid', pol = 'invalid', lr_pol_last_analysed = '{cur_date}' " \
-                  f"where id  = {user_id}"
-    update_table(sql_invalid)
-    print(f"Set {user_id} to invalid")
+    if math.isnan(user_id) == False:
+        sql_invalid = f"update n_users set lr = 'invalid', pol = 'invalid', lr_pol_last_analysed = '{cur_date}' " \
+                      f"where id  = {user_id}"
+        update_table(sql_invalid)
+        print(f"Set {user_id} to invalid")
 
 
 def get_staging_table_name(table_name: str) -> str:
