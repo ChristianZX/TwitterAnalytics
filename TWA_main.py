@@ -46,7 +46,13 @@ def bert_predictions(tweet: pd.DataFrame, model: ClassificationModel):
     :param model: Bert Model
     :return: list of pr
     """
-    predictions, raw_outputs = model.predict(tweet)
+    tweet = tweet.values.tolist()
+    try:
+        predictions, raw_outputs = model.predict(tweet)
+    except:
+        for element in tweet.iteritems():
+            model.predict([element])
+        print ("STOPP")
     auswertung = collections.Counter(predictions)
 
     # df = pd.DataFrame(raw_outputs)
@@ -196,10 +202,10 @@ def pickle_file_load_launcher(TFIDF_pol_unpol_conv, Algorithm_pol_unpol):
     return TFIDF_pol_unpol_conv, Algo_pol_unpol
 
 
-def user_analyse_launcher(iterations: int, sql: str, model_path) -> None:
+def user_analyse_launcher(batch_size: int, sql: str, model_path) -> None:
     """
     Starts analysis of user in result of SQL statement. Writes results to DB in table n_users
-    :param iterations: Number of times the SQL statement is used to get new users from DB.
+    :param batch_size: Number of iterations to be performed before saving results to DB.
                 Results are only saved to DB after all users of an iteration have been inferenced/predicted.
                 Therefore it's not advisable to select a huge number of user in one iteration.
                 If an error occurs during the iteration all progress will be lost.
@@ -223,16 +229,12 @@ def user_analyse_launcher(iterations: int, sql: str, model_path) -> None:
 
     # Name of temp table in DB. Is deleted at the end of this function
     table_name = 'temp_result_lr'
-    for i in tqdm(range(iterations)):  # should be enough iterations to analyse complete hashtag (Example: 5000
-        # Users in Hashtag / User Batch Size 200 = 25 iterations)
-        prediction_launcher(table_name, BERT_model, sql, write_to_db=True)
-        #prediction_launcher(table_name, BERT_model, sql, write_to_db=True, TFIDF_pol_unpol_conv, Algo_pol_unpol)
-        # analyse hashtags and write result to DB
-        update_sql = f"update n_users set lr = lr_text, lr_conf = cast (a.lr_conf as numeric), pol = pol_text, " \
-                     f"pol_conf = cast (a.pol_conf as numeric), lr_pol_last_analysed = analyse_date from {table_name} " \
-                     f"a where id = cast(user_id as bigint)"
-        #db_functions.update_table(update_sql)  # update n_users table with new resulsts
-        gc.collect()
+    #for i in tqdm(range(iterations)):  # should be enough iterations to analyse complete hashtag (Example: 5000
+    # Users in Hashtag / User Batch Size 200 = 25 iterations)
+    prediction_launcher(table_name, BERT_model, sql, write_to_db=True)
+    #prediction_launcher(table_name, BERT_model, sql, write_to_db=True, TFIDF_pol_unpol_conv, Algo_pol_unpol)
+    # analyse hashtags and write result to DB
+    gc.collect()
 
 
 
@@ -540,22 +542,38 @@ def prediction_launcher(table_name: str, BERT_model, sql: str,
         start_time = time.time()
         user_id = element[0]
         screen_name = element[1]
-        df_tweets = TwitterAPI.API_tweet_multitool(user_id, 'temp', pages=1, method='user_timeline', append=False,
-                                                   write_to_db=False)  # fills DF with 200 tweets of 1 page
-        if len(df_tweets) < 100:  # user has less then 100 tweets
-            update_to_invalid_list.append(user_id)
-            #db_functions.update_to_invalid(cur_date, user_id)
-            continue
-        if isinstance(df_tweets, str):  # if df_tweets is a string it contains an error message
-            #db_functions.update_to_invalid(cur_date, user_id)
-            update_to_invalid_list.append(user_id)
-            continue
 
-        german_language = helper_functions.lang_detect(df_tweets)
-        if german_language is False:
-            #db_functions.update_to_invalid(cur_date, user_id)
-            update_to_invalid_list.append(user_id)
-            continue
+        def tweet_download_and_lang_detect(df_tweets, user_id, update_to_invalid_list):
+            if isinstance(df_tweets, int):
+                df_tweets = TwitterAPI.API_tweet_multitool(user_id, 'temp', pages=1, method='user_timeline', append=False,
+                                                           write_to_db=False)  # fills DF with 200 tweets of 1 page
+                df_tweets = helper_functions.lang_detect2(df_tweets)
+            else:
+                df_tweets_additions = TwitterAPI.API_tweet_multitool(user_id, 'temp', pages=1, method='user_timeline',
+                                                           append=False,
+                                                           write_to_db=False)  # fills DF with 200 tweets of 1 page
+                df_tweets_additions = helper_functions.lang_detect2(df_tweets_additions)
+                df_tweets = pd.concat([df_tweets, df_tweets_additions])
+                df_tweets.reset_index(inplace=True)
+                del df_tweets['index']
+
+            len_df = len(df_tweets)
+            if len_df <= 50 or len_df  >= 200:
+                # if almost no tweets are german don't try to get more german tweets from this users.
+                # would take to many page loads
+                update_to_invalid_list.append(user_id)
+                abort_loop = True
+            else:
+                # if to few tweets are german load more tweets to get a better result
+                abort_loop = False
+            return df_tweets, update_to_invalid_list, abort_loop
+
+        df_tweets = 0
+        # tries two times to get at least 200 german tweets, if first attempt returns less than 150 german tweets
+        for i in range(2):
+            df_tweets, update_to_invalid_list, abort_loop = tweet_download_and_lang_detect(df_tweets, user_id, update_to_invalid_list)
+            if abort_loop  == True:
+                break
         for method in methods:
             prediction_result = []
             if method == 'pol':
@@ -595,31 +613,39 @@ def prediction_launcher(table_name: str, BERT_model, sql: str,
                 df_pred_data.at[index, 'pol_text'] = text
                 df_pred_data.at[index, 'pol_conf'] = conf
                 df_pred_data.at[index, 'pol_time'] = runtime
-    print("screen_name,Pol,Unpol,Pol_Time,Left,Right,LR_Time")
-    for index, element in df_pred_data.iterrows():
-        print(
-            f"{element['user_id']},{element['screen_name']},{element['pol']}"
-            f",{element['unpol']},{element['pol_time']},{element['left']},{element['right']},{element['lr_time']}")
-    print("\n")
 
-    if write_to_db is True:
-        invalids = pd.DataFrame (update_to_invalid_list)
-        invalids['cur_date'] = cur_date
-        db_functions.df_to_sql(invalids, "temp_invalids", drop='replace')
+        # print("screen_name,Pol,Unpol,Pol_Time,Left,Right,LR_Time")
+        # for index, element in df_pred_data.iterrows():
+        #     print(
+        #         f"{element['user_id']},{element['screen_name']},{element['pol']}"
+        #         f",{element['unpol']},{element['pol_time']},{element['left']},{element['right']},{element['lr_time']}")
+        # print("\n")
 
-        update_sql = """update n_users 
-        set lr = 'invalid', pol= 'invalid', lr_pol_last_analysed = temp_invalids.cur_Date
-        from temp_invalids 
-        where id = temp_invalids."0"
-        """
-        db_functions.update_table(update_sql)
-        db_functions.drop_table("temp_invalids")
+        if (write_to_db is True and index != 0 and index % batch_size == 0) or (write_to_db is True and df.shape[0] == 1) : #saved data x iterations OR when max results that can be foud is 1
+            invalids = pd.DataFrame (update_to_invalid_list)
+            invalids['cur_date'] = cur_date
+            db_functions.df_to_sql(invalids, "temp_invalids", drop='replace')
 
-        db_functions.df_to_sql(df_pred_data, table_name, drop='replace')
-        print(f"Data written to table: {table_name}.")
-    runtime = time.time() - start_time_overal
-    print(f"Runtime: {runtime}")
-    return df_pred_data
+            update_sql = """update n_users 
+            set lr = 'invalid', pol= 'invalid', lr_pol_last_analysed = temp_invalids.cur_Date
+            from temp_invalids 
+            where id = temp_invalids."0"
+            """
+            db_functions.update_table(update_sql)
+            db_functions.drop_table("temp_invalids")
+
+            db_functions.df_to_sql(df_pred_data, table_name, drop='replace')
+
+            update_sql = f"""
+                         update n_users set lr = lr_text, lr_conf = cast (a.lr_conf as numeric), pol = pol_text,
+                         pol_conf = cast (a.pol_conf as numeric), lr_pol_last_analysed = analyse_date from {table_name} 
+                         a where id = cast(user_id as bigint)"""
+            db_functions.update_table(update_sql)  # update n_users table with new resulsts
+
+            print(f"Data written to table: {table_name}.")
+        runtime = time.time() - start_time_overal
+        print(f"Runtime: {runtime}")
+    #return df_pred_data
 
 
 def eval_bert(model_path) -> None:
@@ -700,8 +726,8 @@ if __name__ == '__main__':
         sql = config['CALCULATE_BERT_SELF_RATING'].get('sql')
         sql = sql.replace("INSERT_HASHTAG", "%" + hashtag + "%")
         model_path = config['CALCULATE_BERT_SELF_RATING'].get('model_path')
-        iterations = config['CALCULATE_BERT_SELF_RATING'].getint('iterations')
-        user_analyse_launcher(iterations=iterations, sql=sql, model_path=model_path)
+        batch_size = config['CALCULATE_BERT_SELF_RATING'].getint('batch_size')
+        user_analyse_launcher(batch_size=batch_size, sql=sql, model_path=model_path)
 
     if config['TASKS'].getboolean('calculate_LR_followers_rating'):
         sql = config['CALCULATE_LR_FOLLOWERS_RATING'].get('sql')
@@ -781,5 +807,3 @@ if __name__ == '__main__':
         # gives rating to accounts in eval_table
         model_path = config['RATE_EVAL_TABLE_ACCOUNTS'].get('model_path')
         eval_bert(model_path)
-
-

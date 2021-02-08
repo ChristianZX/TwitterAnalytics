@@ -257,8 +257,8 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
             df.iloc[index:index + 1, 5:6] = result[2] # tweet
             df.iloc[index:index + 1, 6:7] = hashtag  # hashtag
             df.iloc[index:index + 1, 7:8] = result[0]  # user_id
-            df.iloc[index:index + 1, 8:9] = result[5]  # screen_name
-            df.iloc[index:index + 1, 9:10] = result[4]  # name
+            df.iloc[index:index + 1, 8:9] = result[4]  # screen_name
+            df.iloc[index:index + 1, 9:10] = result[3]  # name
             df.iloc[index:index + 1, 11:12] = result[6]  # in reply to tweet
             df.iloc[index:index + 1, 18:19] = table_name  # in reply to tweet
             #print ("Fetched Tweet: {}".format(element[1]))

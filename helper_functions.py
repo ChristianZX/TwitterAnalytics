@@ -74,6 +74,38 @@ def lang_detect(df: pd.DataFrame) -> bool:
     else:
         return True
 
+def lang_detect2(df: pd.DataFrame) -> bool:
+    """
+    Analyses languages of tweets. Prints warning if >= 75% of tweets are not German
+    Can either analyse dataframe or strings
+    :param df: Dataframe containing column Tweets
+    :return: True at least 75% of Tweets are german, else false
+    """
+
+    lang_list = []
+    if isinstance(df, pd.DataFrame):
+        for index, element in df.iterrows():
+            try:
+                lang_list.append(detect(element['tweet']))
+            except LangDetectException as e:
+                if "No features in text" in str(e):
+                    lang_list.append("no_lang")
+
+    if isinstance(df, str):
+        try:
+            lang_list.append(detect(df))
+        except LangDetectException as e:
+            if "No features in text" in str(e):
+                lang_list.append("no_lang")
+
+    result = collections.Counter(lang_list)
+    percent_DE = result['de'] / len(lang_list) #percentage of german Tweets
+
+    df['lang'] = lang_list
+    df = df[df['lang']=='de']
+    return df
+
+
 # deprecated
 # def interpret_stance(method: str, left, right) -> tuple:
 #     """
