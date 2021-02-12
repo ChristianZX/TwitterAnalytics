@@ -18,7 +18,6 @@ def df_to_sql(df: pd.DataFrame, tablename: str, drop="none", bulk_size: int = 10
     """
     if len (df) == 0:
         print ("Error: Can't write to DB since file size is 0.")
-        sys.exit()
     engine, metadata = sql_alchemy_engine()
     if drop == "replace":
         drop_table(tablename)
@@ -161,6 +160,10 @@ def get_staging_table_name(table_name: str) -> str:
     :param table_name: central name part of staging table
     :return: table name with prefix and suffix
     """
+    table_name = table_name.lower()
+    table_name = table_name.replace('ö', 'oe')
+    table_name = table_name.replace('ü', 'ue')
+    table_name = table_name.replace('ä', 'ae')
     return 's_h_' + table_name + '_' + str(staging_timestamp())
 
 

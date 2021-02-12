@@ -34,6 +34,45 @@ def scrub_tweets(x):
         processed_tweets.append(processed_tweet)
     return processed_tweets
 
+#old version
+# def lang_detect(df: pd.DataFrame) -> bool:
+#     """
+#     Analyses languages of tweets. Prints warning if >= 75% of tweets are not German
+#     Can either analyse dataframe or strings
+#     :param df: Dataframe containing column Tweets
+#     :return: True at least 75% of Tweets are german, else false
+#     """
+#
+#     lang_list = []
+#     if isinstance(df, pd.DataFrame):
+#         for index, element in df.iterrows():
+#             try:
+#                 lang_list.append(detect(element['tweet']))
+#             except LangDetectException as e:
+#                 if "No features in text" in str(e):
+#                     lang_list.append("no_lang")
+#
+#     if isinstance(df, str):
+#         try:
+#             lang_list.append(detect(df))
+#         except LangDetectException as e:
+#             if "No features in text" in str(e):
+#                 lang_list.append("no_lang")
+#
+#     result = collections.Counter(lang_list)
+#     percent_DE = result['de'] / len(lang_list) #percentage of german Tweets
+#
+#     if percent_DE <= 0.50:  # checks if at least 50% of tweets are detected as german
+#         percent_not_german = int(100 - (100 / len(lang_list) * result['de']))
+#         print(f"{percent_not_german}% have been detected as non german. Account can't be evaluated meaningfully!")
+#         return False  # german = False
+#
+#     if percent_DE <= 0.75:  # checks if at least 75% of tweets are detected as german
+#         percent_not_german = int(100 - round((100 / len(lang_list) * result['de']), 1))
+#         print(f"{percent_not_german}% have been detected as non german. Risk of a wrong result is high!")
+#         return False  # german = False
+#     else:
+#         return True
 
 def lang_detect(df: pd.DataFrame) -> bool:
     """
@@ -51,58 +90,19 @@ def lang_detect(df: pd.DataFrame) -> bool:
             except LangDetectException as e:
                 if "No features in text" in str(e):
                     lang_list.append("no_lang")
+        df['lang'] = lang_list
+        df = df[df['lang'] == 'de']
 
     if isinstance(df, str):
         try:
             lang_list.append(detect(df))
+            return 0
         except LangDetectException as e:
             if "No features in text" in str(e):
                 lang_list.append("no_lang")
-
-    result = collections.Counter(lang_list)
-    percent_DE = result['de'] / len(lang_list) #percentage of german Tweets
-
-    if percent_DE <= 0.50:  # checks if at least 50% of tweets are detected as german
-        percent_not_german = int(100 - (100 / len(lang_list) * result['de']))
-        print(f"{percent_not_german}% have been detected as non german. Account can't be evaluated meaningfully!")
-        return False  # german = False
-
-    if percent_DE <= 0.75:  # checks if at least 75% of tweets are detected as german
-        percent_not_german = int(100 - round((100 / len(lang_list) * result['de']), 1))
-        print(f"{percent_not_german}% have been detected as non german. Risk of a wrong result is high!")
-        return False  # german = False
-    else:
-        return True
-
-def lang_detect2(df: pd.DataFrame) -> bool:
-    """
-    Analyses languages of tweets. Prints warning if >= 75% of tweets are not German
-    Can either analyse dataframe or strings
-    :param df: Dataframe containing column Tweets
-    :return: True at least 75% of Tweets are german, else false
-    """
-
-    lang_list = []
-    if isinstance(df, pd.DataFrame):
-        for index, element in df.iterrows():
-            try:
-                lang_list.append(detect(element['tweet']))
-            except LangDetectException as e:
-                if "No features in text" in str(e):
-                    lang_list.append("no_lang")
-
-    if isinstance(df, str):
-        try:
-            lang_list.append(detect(df))
-        except LangDetectException as e:
-            if "No features in text" in str(e):
-                lang_list.append("no_lang")
-
-    result = collections.Counter(lang_list)
-    percent_DE = result['de'] / len(lang_list) #percentage of german Tweets
-
-    df['lang'] = lang_list
-    df = df[df['lang']=='de']
+            return 0
+    #result = collections.Counter(lang_list)
+    #percent_DE = result['de'] / len(lang_list) #percentage of german Tweets
     return df
 
 
@@ -224,7 +224,8 @@ def calculate_combined_score(bert_friends_high_confidence_cap_off:float, self_co
     count_bert_friends_result_is_mediocre = 0
     count_uncategorized_accounts = 0
 
-    if BERT_ML_rating != 0 and BERT_ML_conf >= bert_friends_high_confidence_cap_off:
+    #Use BERT_FRIEND_ML rating if available, alternatively use regular BERT_FRIEND rating
+    if BERT_ML_rating != 0:
         friend_rating = BERT_ML_rating
         friend_conf = float(BERT_ML_conf)
         L_friends = min_required_bert_friend_opinions
@@ -240,7 +241,7 @@ def calculate_combined_score(bert_friends_high_confidence_cap_off:float, self_co
     if friend_conf > 1:
         friend_conf /= 100
 
-    if self_lr == friend_rating and self_lr in ['links', 'rechts'] and L_friends + R_friends >= min_required_bert_friend_opinions:
+    if self_lr == friend_rating and self_lr in ['links', 'rechts'] and L_friends + R_friends >= min_required_bert_friend_opinions and friend_conf >= bert_friends_high_confidence_cap_off and self_lr_conf >= self_conf_high_conf_cap_off:
         new_conf = self_lr_conf * 0.65 + friend_conf * 0.65
         if new_conf > 1:
             new_conf = 1
@@ -379,6 +380,25 @@ def check_DB_users_existance(id):
         return True
     elif len (df) == 0:
         return False
+
+
+def dataframe_length(df):
+    """
+    Checks if variable is a dataframe and if so returns its length
+    :param df: Variable of type Dataframe, string, None or in
+    :return: Length as int
+    """
+    try:
+        ldf = len(df)
+        return ldf
+    except (SyntaxError, TypeError):
+        if df is None:
+            return 0
+        if isinstance(df, int):
+            return 0
+        if isinstance(df, str):
+            return 0
+
 
 
 if __name__ == "__main__":

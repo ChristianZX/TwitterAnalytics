@@ -86,11 +86,18 @@ def build_model():
         # },
         {
             'clf__estimator': [RandomForestClassifier()],  #
-            'clf__estimator__n_estimators': (100, 500, 1000, 2000),
-            'clf__estimator__criterion': ['gini', 'entropy'],
-            'clf__estimator__min_samples_split': [2, 4, 6],
-            'clf__estimator__min_samples_leaf': [1,2,3,4],
+            'clf__estimator__n_estimators': (1000),
+            'clf__estimator__criterion': ['gini'],
+            'clf__estimator__min_samples_split': [2],
+            'clf__estimator__min_samples_leaf': [1],
         },
+        # {
+        #     'clf__estimator': [RandomForestClassifier()],  #
+        #     'clf__estimator__n_estimators': (100, 500, 1000, 2000),
+        #     'clf__estimator__criterion': ['gini', 'entropy'],
+        #     'clf__estimator__min_samples_split': [2, 4, 6],
+        #     'clf__estimator__min_samples_leaf': [1,2,3,4],
+        # },
         # {
         #     'clf__estimator': [AdaBoostClassifier()],  #
         #     'clf__estimator__n_estimators': (100, 500, 1000, 2000),
@@ -118,9 +125,29 @@ def build_model():
     return classifier
 
 
-def create_training_matrix (load_from_db, sql_left, sql_right, clf_pure_predict_path, column_list_path):
-    pickle_name_left = "df_left.pkl"
-    pickle_name_right = "df_right.pkl"
+def create_training_matrix (load_from_db, sql_left, sql_right, clf_pure_predict_path, column_list_path, pickle_name_left, pickle_name_right, classifier_pkl):
+    """
+    Creates training matrix for Bert_Friend_ML training, runs training and saves the model as pickle file.
+    The trained model tries to answer this question: If you follow 1 communists, 5 moderate lefties, 4 conservatives and 2 Nazis. What does that make you?
+    SQL Input by columns:
+        u.id: Id of an average Jow type Twitter user like you and me
+        u.combined_rating: Left/Right rating of above average users
+        u.combined_conf: combined confidence of above user
+        f.user_id: Id of a "big user" with many followers (e.g. Bernie Sanders) the average Joe follows
+    Column List:
+        All big users will end up as columns (with their IDs) in a matrix. The IDs ares stored in order to match users
+        during inference against them
+    Pure predict:
+        Pure predict is light weight version of sk learn that performs the inference much faster at the cost a tiny
+        bit of accuracy (> 0,5%)
+    :param load_from_db: False to use data from pickle file
+    :param sql_left: left wing users
+    :param sql_right: right wing users
+    :param clf_pure_predict_path: Will save pure predict model at this location
+    :param column_list_path: Column List save path
+    :param classifier_pkl: Classifier path
+    :return: None
+    """
     if load_from_db:
         # sql_left= """
         # select distinct u.id, u.combined_rating, u.combined_conf, f.user_id from n_followers f, n_users u
@@ -169,7 +196,7 @@ def create_training_matrix (load_from_db, sql_left, sql_right, clf_pure_predict_
 
     clf_pure_predict = convert_estimator(classifier)
     db_functions.save_pickle(clf_pure_predict, clf_pure_predict_path)
-    db_functions.save_pickle(classifier, "friend_rating_classifier.pkl")
+    db_functions.save_pickle(classifier, classifier_pkl)
     db_functions.save_pickle(column_list, column_list_path)
 
     predictions = classifier.predict(X_test)

@@ -22,6 +22,7 @@ import BERT_friends_ML
 import helper_functions
 from helper_functions import calculate_combined_score, count_friend_stances
 import TFIDF_inference
+import topic_model
 import TwitterAPI
 
 
@@ -538,113 +539,135 @@ def prediction_launcher(table_name: str, BERT_model, sql: str,
         sys.exit()
     gc.collect()
 
+
     for index, element in tqdm(df.iterrows(), total=df.shape[0]):
         start_time = time.time()
         user_id = element[0]
         screen_name = element[1]
 
         def tweet_download_and_lang_detect(df_tweets, user_id, update_to_invalid_list):
+            """
+            Calls language detection and checks if enough german tweets remain.
+            If it found almost enough german Tweets it will load more.
+            If it found almost none it will abort.
+            :param df_tweets: 0 during first run, dataframe with tweets during later runs
+            :param user_id: Twitter User_ID for tweet download and language check
+            :param update_to_invalid_list: List of user that can not be downloaded from. Will append to if applicable.
+            :return: df_tweets, update_to_invalid_list, abort_loop, len_df
+            """
             if isinstance(df_tweets, int):
                 df_tweets = TwitterAPI.API_tweet_multitool(user_id, 'temp', pages=1, method='user_timeline', append=False,
                                                            write_to_db=False)  # fills DF with 200 tweets of 1 page
-                df_tweets = helper_functions.lang_detect2(df_tweets)
+                df_tweets = helper_functions.lang_detect(df_tweets)
             else:
                 df_tweets_additions = TwitterAPI.API_tweet_multitool(user_id, 'temp', pages=1, method='user_timeline',
                                                            append=False,
                                                            write_to_db=False)  # fills DF with 200 tweets of 1 page
-                df_tweets_additions = helper_functions.lang_detect2(df_tweets_additions)
-                df_tweets = pd.concat([df_tweets, df_tweets_additions])
-                df_tweets.reset_index(inplace=True)
-                del df_tweets['index']
+                df_tweets_additions = helper_functions.lang_detect(df_tweets_additions)
+                if isinstance(df_tweets_additions, pd.DataFrame):
+                    df_tweets = pd.concat([df_tweets, df_tweets_additions])
+                    df_tweets.reset_index(inplace=True)
+                    del df_tweets['index']
 
-            len_df = len(df_tweets)
-            if len_df <= 50 or len_df  >= 200:
+            # if df_tweets is None: #no tweets found or all tweets deleted (non german)
+            #     abort_loop = True
+            #     return df_tweets, update_to_invalid_list, abort_loop'
+
+            len_df = helper_functions.dataframe_length(df_tweets)
+            if len_df <= 50:
                 # if almost no tweets are german don't try to get more german tweets from this users.
                 # would take to many page loads
                 update_to_invalid_list.append(user_id)
                 abort_loop = True
+            elif len_df  >= 200:
+                abort_loop = True
             else:
                 # if to few tweets are german load more tweets to get a better result
                 abort_loop = False
-            return df_tweets, update_to_invalid_list, abort_loop
+            gc.collect()
+            return df_tweets, update_to_invalid_list, abort_loop, len_df
 
         df_tweets = 0
         # tries two times to get at least 200 german tweets, if first attempt returns less than 150 german tweets
         for i in range(2):
-            df_tweets, update_to_invalid_list, abort_loop = tweet_download_and_lang_detect(df_tweets, user_id, update_to_invalid_list)
-            if abort_loop  == True:
+            df_tweets, update_to_invalid_list, abort_loop, len_df = tweet_download_and_lang_detect(df_tweets, user_id, update_to_invalid_list)
+            if abort_loop == True:
                 break
-        for method in methods:
-            prediction_result = []
-            if method == 'pol':
-                if TFIDF_pol_unpol_conv == 0 or Algo_pol_unpol == 0:
-                    print ("Warning: No Political/Unpolitical classifier given. Check function parameters.")
+
+        if len_df > 0:
+            for method in methods:
+                prediction_result = []
+                if method == 'pol':
+                    if TFIDF_pol_unpol_conv == 0 or Algo_pol_unpol == 0:
+                        print ("Warning: No Political/Unpolitical classifier given. Check function parameters.")
+                    else:
+                        prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], TFIDF_pol_unpol_conv, Algo_pol_unpol))
+                if method == 'LR':
+                    #prediction_result.append(inference_political_bert.bert_predictions(df_tweets['tweet'], BERT_model))
+                    prediction_result.append(bert_predictions(df_tweets['tweet'], BERT_model))
+                runtime = int(time.time() - start_time)
+
+                # returns text interpretation of inference
+                text, conf = helper_functions.conf_value(method, prediction_result, max_boundary=len(df_tweets))
+
+                # result and confidence score
+                df_pred_data.at[index, 'user_id'] = user_id
+                df_pred_data.at[index, 'screen_name'] = screen_name
+                df_pred_data.at[index, 'analyse_date'] = cur_date
+
+                # TODO: If you store the column names in variables that update depending on the method, you only need
+                #  one block
+                pred_result_zero = 'left' if method == "LR" else 'pol'
+                pred_result_one = 'right' if method == "LR" else 'unpol'
+                df_pred_data.at[index, pred_result_zero] = prediction_result[0][0]
+                df_pred_data.at[index, pred_result_one] = prediction_result[0][1]
+
+                if method == "LR":
+                    df_pred_data.at[index, 'left'] = prediction_result[0][0]
+                    df_pred_data.at[index, 'right'] = prediction_result[0][1]
+                    df_pred_data.at[index, 'lr_text'] = text
+                    df_pred_data.at[index, 'lr_conf'] = conf
+                    df_pred_data.at[index, 'lr_time'] = runtime
                 else:
-                    prediction_result.append(TFIDF_inference.TFIDF_inference(df_tweets['tweet'], TFIDF_pol_unpol_conv, Algo_pol_unpol))
-            if method == 'LR':
-                #prediction_result.append(inference_political_bert.bert_predictions(df_tweets['tweet'], BERT_model))
-                prediction_result.append(bert_predictions(df_tweets['tweet'], BERT_model))
-            runtime = int(time.time() - start_time)
+                    df_pred_data.at[index, 'pol'] = prediction_result[0][0]
+                    df_pred_data.at[index, 'unpol'] = prediction_result[0][1]
+                    df_pred_data.at[index, 'pol_text'] = text
+                    df_pred_data.at[index, 'pol_conf'] = conf
+                    df_pred_data.at[index, 'pol_time'] = runtime
 
-            # returns text interpretation of inference
-            text, conf = helper_functions.conf_value(method, prediction_result)
+            # print("screen_name,Pol,Unpol,Pol_Time,Left,Right,LR_Time")
+            # for index, element in df_pred_data.iterrows():
+            #     print(
+            #         f"{element['user_id']},{element['screen_name']},{element['pol']}"
+            #         f",{element['unpol']},{element['pol_time']},{element['left']},{element['right']},{element['lr_time']}")
+            # print("\n")
+            # if index == 6:
+            #     print ("Stopp")
+            if (write_to_db is True and index != 0 and index % batch_size == 0) or (write_to_db is True and (df.shape[0])  == (index+1)) : #saved data x iterations OR when df has no further rows
+                if len(update_to_invalid_list) > 0:
+                    invalids = pd.DataFrame (update_to_invalid_list)
+                    invalids['cur_date'] = cur_date
+                    db_functions.df_to_sql(invalids, "temp_invalids", drop='replace')
+                    update_sql = """update n_users 
+                    set lr = 'invalid', pol= 'invalid', lr_pol_last_analysed = temp_invalids.cur_Date
+                    from temp_invalids 
+                    where id = temp_invalids."0"
+                    """
+                    db_functions.update_table(update_sql)
+                    db_functions.drop_table("temp_invalids")
 
-            # result and confidence score
-            df_pred_data.at[index, 'user_id'] = user_id
-            df_pred_data.at[index, 'screen_name'] = screen_name
-            df_pred_data.at[index, 'analyse_date'] = cur_date
+                if helper_functions.dataframe_length(df_pred_data) > 0:
+                    db_functions.df_to_sql(df_pred_data, table_name, drop='replace')
+                    update_sql = f"""
+                                 update n_users set lr = lr_text, lr_conf = cast (a.lr_conf as numeric), pol = pol_text,
+                                 pol_conf = cast (a.pol_conf as numeric), lr_pol_last_analysed = analyse_date from {table_name} 
+                                 a where id = cast(user_id as bigint)"""
+                    db_functions.update_table(update_sql)  # update n_users table with new resulsts
 
-            # TODO: If you store the column names in variables that update depending on the method, you only need
-            #  one block
-            pred_result_zero = 'left' if method == "LR" else 'pol'
-            pred_result_one = 'right' if method == "LR" else 'unpol'
-            df_pred_data.at[index, pred_result_zero] = prediction_result[0][0]
-            df_pred_data.at[index, pred_result_one] = prediction_result[0][1]
-
-            if method == "LR":
-                df_pred_data.at[index, 'left'] = prediction_result[0][0]
-                df_pred_data.at[index, 'right'] = prediction_result[0][1]
-                df_pred_data.at[index, 'lr_text'] = text
-                df_pred_data.at[index, 'lr_conf'] = conf
-                df_pred_data.at[index, 'lr_time'] = runtime
-            else:
-                df_pred_data.at[index, 'pol'] = prediction_result[0][0]
-                df_pred_data.at[index, 'unpol'] = prediction_result[0][1]
-                df_pred_data.at[index, 'pol_text'] = text
-                df_pred_data.at[index, 'pol_conf'] = conf
-                df_pred_data.at[index, 'pol_time'] = runtime
-
-        # print("screen_name,Pol,Unpol,Pol_Time,Left,Right,LR_Time")
-        # for index, element in df_pred_data.iterrows():
-        #     print(
-        #         f"{element['user_id']},{element['screen_name']},{element['pol']}"
-        #         f",{element['unpol']},{element['pol_time']},{element['left']},{element['right']},{element['lr_time']}")
-        # print("\n")
-
-        if (write_to_db is True and index != 0 and index % batch_size == 0) or (write_to_db is True and df.shape[0] == 1) : #saved data x iterations OR when max results that can be foud is 1
-            invalids = pd.DataFrame (update_to_invalid_list)
-            invalids['cur_date'] = cur_date
-            db_functions.df_to_sql(invalids, "temp_invalids", drop='replace')
-
-            update_sql = """update n_users 
-            set lr = 'invalid', pol= 'invalid', lr_pol_last_analysed = temp_invalids.cur_Date
-            from temp_invalids 
-            where id = temp_invalids."0"
-            """
-            db_functions.update_table(update_sql)
-            db_functions.drop_table("temp_invalids")
-
-            db_functions.df_to_sql(df_pred_data, table_name, drop='replace')
-
-            update_sql = f"""
-                         update n_users set lr = lr_text, lr_conf = cast (a.lr_conf as numeric), pol = pol_text,
-                         pol_conf = cast (a.pol_conf as numeric), lr_pol_last_analysed = analyse_date from {table_name} 
-                         a where id = cast(user_id as bigint)"""
-            db_functions.update_table(update_sql)  # update n_users table with new resulsts
-
-            print(f"Data written to table: {table_name}.")
-        runtime = time.time() - start_time_overal
-        print(f"Runtime: {runtime}")
+                    print(f"Data written to table: {table_name}.")
+        gc.collect()
+        #runtime = time.time() - start_time_overal
+        #print(f"Runtime: {runtime}")
     #return df_pred_data
 
 
@@ -708,7 +731,7 @@ if __name__ == '__main__':
     file = args.name
     print(f"Filename: {file}")
     config = configparser.ConfigParser()
-    config.read(file)
+    config.read(file, encoding="utf-8")
 
     hashtag = config['GLOBAL'].get('hashtag')
 
@@ -787,7 +810,10 @@ if __name__ == '__main__':
         sql_right = config['RE_RUN_ML_FRIEND_TRAINING'].get('sql_right')
         clf_pure_predict_path = config['RE_RUN_ML_FRIEND_TRAINING'].get('clf_pure_predict_path')
         column_list_path = config['RE_RUN_ML_FRIEND_TRAINING'].get('column_list_path')
-        BERT_friends_ML.create_training_matrix(load_from_db, sql_left, sql_right, clf_pure_predict_path, column_list_path)
+        pickle_name_left = config['RE_RUN_ML_FRIEND_TRAINING'].get('pickle_name_left')
+        pickle_name_right = config['RE_RUN_ML_FRIEND_TRAINING'].get('pickle_name_right')
+        classifier_pkl = config['RE_RUN_ML_FRIEND_TRAINING'].get('classifier_pkl')
+        BERT_friends_ML.create_training_matrix(load_from_db, sql_left, sql_right, clf_pure_predict_path, pickle_name_left, pickle_name_right, column_list_path, classifier_pkl)
 
     if config['TASKS'].getboolean('download_followership'):
         user_ids = config['DOWNLOAD_FOLLOWERSHIP'].get('user_ids')
@@ -807,3 +833,11 @@ if __name__ == '__main__':
         # gives rating to accounts in eval_table
         model_path = config['RATE_EVAL_TABLE_ACCOUNTS'].get('model_path')
         eval_bert(model_path)
+
+    if config['TASKS'].getboolean('show_word_cloud'):
+        #plots two word clouds
+        sql = config['SHOW_WORD_CLOUD'].get('sql')
+        sql = sql.replace("INSERT_HASHTAG", "%" + hashtag + "%")
+        topic_model.topic_model_wordcloud(sql)
+
+
