@@ -4,6 +4,7 @@ import pandas as pd
 from langdetect import detect
 from langdetect.lang_detect_exception import LangDetectException
 import re
+import time
 from tqdm import tqdm
 import db_functions
 import TwitterAPI
@@ -400,7 +401,26 @@ def dataframe_length(df):
             return 0
 
 
+def sql_timer(sql):
+    start = time.time()
+    db_functions.select_from_db(sql)
+    print(f"Runtime: {time.time() - start}")
 
 if __name__ == "__main__":
-    print (check_DB_users_existance(16745492))
+    sql = """
+    select * from 
+	(select distinct u.id, u.combined_rating, u.combined_conf, f.follows_ids as user_id   
+	from n_friends f, n_users u
+	where f.user_id = u.id
+	and u.combined_conf > 0.7
+	order by u.id) A,
+	(select distinct user_id, follows_ids, count (user_id)
+	from n_friends
+	where 1=1
+	group by user_id, follows_ids
+	having count (user_id) >= 1) B
+    where A.id = B.user_id"""
+
+    sql_timer(sql)
+    #print (check_DB_users_existance(16745492))
 

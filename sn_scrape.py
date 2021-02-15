@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import db_functions
 import TwitterAPI
+import time
 from tqdm import tqdm
 
 
@@ -52,7 +53,7 @@ def SN_db_operations(hashtag: str, since: str, until: str) -> tuple:
     return table_name, hashtag, df.shape[0]
 
 
-def hashtag_download_launcher(hashtag, since: str, until: str):
+def hashtag_download_launcher(hashtag, since: str, until: str, download_parent_tweets: bool):
     """
     Manages whole hashtag download process.
     Step1: Calls procedures for SQL table creation, Tweet ID download
@@ -66,8 +67,18 @@ def hashtag_download_launcher(hashtag, since: str, until: str):
     table_name, hashtag, len_df = SN_db_operations(hashtag, since, until)
     print("Hashtag Twitter ID download complete. Starting detail download.")
     bulk_size = 1000
-    for i in tqdm(range(int(len_df / bulk_size + 1))):
-        TwitterAPI.tweet_details_download_launcher(table_name, hashtag, bulk_size)
+
+
+
+    new_tweets_fetched = 1
+    loop_counter = 1
+    while new_tweets_fetched != 0:
+        start_time = time.time()
+        print (f"Iteration {loop_counter} running. Estimated Iterations {int (len_df / bulk_size) +1+5}")
+        #+1 to avoid 0 itteratios, +5 is a good estimate for number of iterations to get all parent tweets
+        new_tweets_fetched = TwitterAPI.tweet_details_download_launcher(table_name, hashtag, bulk_size, download_parent_tweets)
+        loop_counter += 1
+        print (f"Iteration {loop_counter} runtime: {time.time() - start_time} ")
     print("Hashtag downloaded successfully.")
 
     #insert new users into table n_users

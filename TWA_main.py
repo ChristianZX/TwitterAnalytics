@@ -315,69 +315,7 @@ def friend_rating_launcher(sql: str, get_data_from_DB: bool) -> None:
     db_functions.update_table(sql)
     db_functions.drop_table("temp_result")
     print(f"Runtime in  min: {(time.time() - start_time) / 60} ")
-#
-# def friend_rating_launcher_neu(sql: str, get_data_from_DB: bool) -> None:
-#     # def bert_friends_score(get_data_from_DB):
-#     """Refreshes score for all users in DB who...
-#      1) have a Bert LR rating and
-#      2) follow someone in n_followers
-#     Writes result to table n_users (total runtime 87 min)
-#     """
-#     timestamp = db_functions.staging_timestamp()
-#     start_time = time.time()
-#
-#     if get_data_from_DB is True:
-#         # Runtime 18 min
-#         # --Bert_Friends: Zu bewertende User und die Scores ihrer Freunde
-#         df = db_functions.select_from_db(sql)
-#         db_functions.save_pickle(df, "bert_friends.pkl")
-#     else:
-#         df = db_functions.load_pickle("bert_friends.pkl")
-#
-#     #df = df.iloc[:50000,:]
-#     df = df.drop(columns=['screen_name', 'bert_self'])
-#     #df_sub0 = df.groupby(['follows_ids', 'bert_self']).size().unstack(fill_value=0) #All Users with LR Rating
-#     #df_sub0.drop(columns=['invalid', 'unentschieden'])
-#     #df_sub1 = df.groupby(['follows_ids', 'bert_friends']).size().unstack(fill_value=0) #count of all users Friend Ratings
-#     #del df
-#
-#     df = df.groupby(['follows_ids', 'bert_friends']).size().unstack(fill_value=0)  # count of all users Friend Ratings
-#     user_list = df.index.to_list()
-#     #result = df_sub1.join(df_sub0, lsuffix='_friend_Bert', rsuffix='_self_Bert')
-#     #del df_sub0
-#     #del df_sub1
-#
-#     #user_list = result.index.to_list()
-#     #left_friend_Bert_list = result['links_friend_Bert'].to_list()
-#     #right_friend_Bert_list = result['rechts_friend_Bert'].to_list()
-#     left_friend_Bert_list = df['links'].to_list()
-#     right_friend_Bert_list = df['rechts'].to_list()
-#     del df
-#     #del result
-#     user_dict = {}
-#     for i, user in enumerate(tqdm(user_list)):
-#         if user not in user_dict:
-#             user_dict[user] = {}
-#         right = right_friend_Bert_list[i]
-#         left = left_friend_Bert_list[i]
-#         #text, conf = helper_functions.interpret_stance("LR", left, right)
-#         text, conf = helper_functions.conf_value(method = 'LR', prediction_result = [[left, right]], min_boundary = 0, max_boundary = left + right)
-#         user_dict[user]["text"] = text
-#         user_dict[user]["confidence"] = conf
-#         user_dict[user]["last_seen"] = timestamp
-#         user_dict[user]["bf_left_number"] = left
-#         user_dict[user]["bf_right_number"] = right
-#
-#     db_functions.save_pickle(user_dict, "bert_friends_dict.pkl")
-#     result = pd.DataFrame(user_dict).T
-#     db_functions.df_to_sql(result, "temp_result", drop='replace')
-#     sql = "update n_users set result_bert_friends = text, bert_friends_conf = cast(confidence as numeric), " \
-#           "bert_friends_last_seen = temp_result.last_seen, bf_left_number = temp_result.bf_left_number, " \
-#           "bf_right_number = temp_result.bf_right_number from temp_result where id = cast (temp_result.index as bigint)"
-#     db_functions.update_table(sql)
-#     db_functions.drop_table("temp_result")
-#     print(f"Runtime in  min: {(time.time() - start_time) / 60} ")
-#
+
 
 def combined_scores_calc_launcher(sql: str, bert_friends_high_confidence_capp_off, self_conf_high_conf_capp_off, min_required_bert_friend_opinions):
     """
@@ -738,7 +676,8 @@ if __name__ == '__main__':
     if config['TASKS'].getboolean('download_hashtag'):
         since = config['DOWNLOAD_HASHTAG'].get('since')
         until = config['DOWNLOAD_HASHTAG'].get('until')
-        sn_scrape.hashtag_download_launcher(hashtag=hashtag, since=since, until=until)
+        download_parent_tweets = config['DOWNLOAD_HASHTAG'].getboolean('download_parent_tweets')
+        sn_scrape.hashtag_download_launcher(hashtag=hashtag, since=since, until=until, download_parent_tweets = download_parent_tweets)
 
     if config['TASKS'].getboolean('download_friends'):
         sql = config['DOWNLOAD_FRIENDS'].get('sql')

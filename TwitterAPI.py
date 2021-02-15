@@ -232,16 +232,29 @@ def API_tweet_multitool(query: str, table_name: str, pages: int, method: str, ap
         return df
 
 
-def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: int = 1000):
+def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: int = 1000, download_parent_tweets = True):
     """
     1. Calls Tweet downloader
     2. Adds details to Tweet IDs in staging table via update
+    3. If Tweets are are reply to another tweet, those parent tweets can be downloaded via option download_parent_tweets
     :param table_name: Staging table name which will be updated
     :param hashtag: hashtag scraped
     :param bulk_size: number of tweets to processed in one function call
+    :param download_parent_tweets: If True: Loops through all tweets until no further father elements can be found
     :return: none
     """
-    df = db_functions.select_from_db(f"select * from {table_name} where tweet is null limit {bulk_size}")
+
+    parent_sql = f"""select * from {table_name} where tweet is null 
+    or (retweet is not null and retweet not in (select id from {table_name})) limit {bulk_size}"""
+    df_parent = db_functions.select_from_db(parent_sql)
+    df_parent['id'] = df_parent['retweet'] #replaces tweet ID with parent id. Otherwise previously downloaded tweets would be downloaded again
+
+    sql = f"select * from {table_name} where tweet is null limit {bulk_size}"
+    df = db_functions.select_from_db(sql)
+
+    download_parents = helper_functions.dataframe_length(df) == 0 and download_parent_tweets == True
+    if download_parents == True:
+        df = df_parent
     for index, element in df.iterrows():
         error = False
         # downloads details for Tweets from staging table
@@ -259,8 +272,8 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
             df.iloc[index:index + 1, 7:8] = result[0]  # user_id
             df.iloc[index:index + 1, 8:9] = result[4]  # screen_name
             df.iloc[index:index + 1, 9:10] = result[3]  # name
-            df.iloc[index:index + 1, 11:12] = result[6]  # in reply to tweet
-            df.iloc[index:index + 1, 18:19] = table_name  # in reply to tweet
+            df.iloc[index:index + 1, 11:12] = result[5]  # in reply to tweet id
+            df.iloc[index:index + 1, 18:19] = table_name
             #print ("Fetched Tweet: {}".format(element[1]))
 
     if len(df) == 0:
@@ -268,12 +281,23 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
     db_functions.df_to_sql(df, 'temp_df', 'replace')
 
     #update staging table with values form temp_df
-    sql = f"update {table_name} a set date = b.date, tweet = b.tweet, hashtags = b.hashtags, " \
-          "user_id = cast (b.user_id as bigint), username = b.username, name = b.name, " \
-          "retweet = cast (b.retweet as bigint), staging_name = b.staging_name from (select * from temp_df) b " \
-          "where a.id = b.id"
+    if download_parents == False:
+        sql = f"""update {table_name} a set date = b.date, tweet = b.tweet, hashtags = b.hashtags,
+              user_id = cast (b.user_id as bigint), username = b.username, name = b.name,
+              retweet = cast (b.retweet as bigint), staging_name = b.staging_name from (select * from temp_df) b
+              where a.id = b.id"""
+    else:
+        sql = f"""INSERT INTO {table_name} 
+        SELECT index::bigint, id, conversation_id::bigint, created_at, date, tweet, hashtags, user_id, username, name,
+        link::bigint, retweet, nlikes::bigint, nreplies::bigint, nretweets::bigint, quote_url::bigint, user_rt_id::bigint,
+        user_rt::bigint, staging_name FROM temp_df"""
+        print (f"{new_tweets_fetched} parent tweets added.")
     db_functions.update_table(sql)
     db_functions.drop_table('temp_df')
+
+
+    new_tweets_fetched = helper_functions.dataframe_length(df)
+    return new_tweets_fetched
 
 
 def API_get_tweet_details(tweet_id: str, sleep: bool = True):
