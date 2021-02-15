@@ -230,11 +230,11 @@ Afterwards excute TWA_main.py with paramater `--name config.ini`
 
 
 ## Future Plans  
-* Include a Topic Model
 * Train english BERT to give self rating to englisch account and improve Friend-Rating.
 * Stop language detection if 100% of the first 50 Tweets are german, if this improves performance significantly.
 * Run statistical test for hashtag analysis: Assuming moderate and right accounts have an accuracy of 90%, to what degree do classification mistakes cancel out each other during hashtag analysis?
 * Learn to detect left extremists to eventually identify three classes: right, moderate, left.
+* Done: Include a Topic Model
 * Done: If between 50% and 75% of user Tweets are german continue loading tweets until 200 are german have been downloaded.
 * Done: Improve German BERT Training: Analyse individual tweets of each training set and use only those for training, that have a high confidence.
 
