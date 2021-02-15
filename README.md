@@ -237,6 +237,12 @@ Afterwards excute TWA_main.py with paramater `--name config.ini`
 * Done: Include a Topic Model
 * Done: If between 50% and 75% of user Tweets are german continue loading tweets until 200 are german have been downloaded.
 * Done: Improve German BERT Training: Analyse individual tweets of each training set and use only those for training, that have a high confidence.
+* Failed: Generate machine learning training based on the personal friends of a users. Idea was to replace the mere counting of step 6 by an approach that is identical to step 3b.
+It didn't work since my DB contains only 30.000 users.  
+Problem A: If I create a scarse matrix from all users friends it will get so many columns Pandas gets an int32 indexing error
+Problem B: If I only use those friends, that have a least two data connections (Statement sql2), the number of matrix columns drops to 756
+which isn't enough for training.
+Lesson learned: I would need way more friend relations for this machine learning training
 
 
 
