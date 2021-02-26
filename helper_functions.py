@@ -408,18 +408,17 @@ def sql_timer(sql):
 
 if __name__ == "__main__":
     sql = """
-    select * from 
-	(select distinct u.id, u.combined_rating, u.combined_conf, f.follows_ids as user_id   
-	from n_friends f, n_users u
-	where f.user_id = u.id
-	and u.combined_conf > 0.7
-	order by u.id) A,
-	(select distinct user_id, follows_ids, count (user_id)
-	from n_friends
-	where 1=1
-	group by user_id, follows_ids
-	having count (user_id) >= 1) B
-    where A.id = B.user_id"""
+    select follows_ids as id from
+        (select fr.follows_ids, count(fr.follows_ids)
+        from facts_hashtags f, n_friends fr
+        where 1=1
+		 --and from_staging_table like 'INSERT_HASHTAG'
+		 and f.user_id = fr.user_id
+        group by fr.follows_ids
+        having count(fr.follows_ids) >= 500
+        order by count(fr.follows_ids) desc) a
+      except select cast (user_id as text) from n_followers where retrieve_date <= replace (substring (cast(NOW() - INTERVAL '6 Month' as Text), 1, 10), '-', '')
+    """
 
     sql_timer(sql)
     #print (check_DB_users_existance(16745492))

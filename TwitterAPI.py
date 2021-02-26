@@ -77,7 +77,8 @@ def API_Followers(screen_name: str, user_id: str, download_limit=12500000):
                        'retrieve_date': pd.Series(timestamp)
                        })
 
-    db_functions.insert_to_table_followers_or_friends(df, table_name = 'n_followers', username = False)
+    db_functions.df_to_sql(df,'temp_followers',drop='replace')
+    #db_functions.insert_to_table_followers_or_friends(df, table_name = 'n_followers', username = False)
 
 
 

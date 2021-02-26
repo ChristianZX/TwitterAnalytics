@@ -16,7 +16,7 @@ import time
 import torch
 from tqdm import tqdm
 from transformers import logging
-
+from datetime import date
 import db_functions
 import BERT_friends_ML
 import helper_functions
@@ -55,6 +55,7 @@ def bert_predictions(tweet: pd.DataFrame, model: ClassificationModel):
             model.predict([element])
         print ("STOPP")
     auswertung = collections.Counter(predictions)
+    gc.collect()
 
     # df = pd.DataFrame(raw_outputs)
     # df['predictions'] = pd.DataFrame(predictions)
@@ -100,7 +101,7 @@ def run():
     torch.multiprocessing.freeze_support()
     print('loop')
 
-def get_followers(sql, download_limit = 12500000) -> None:
+def get_followers(sql, download_limit = 12500000, time_limit = False) -> None:
     """
     Is given user ids in form of SQL statement OR as List. Will retrieve followers for this user from Twitter.
     :param sql: SQL statement containing followers OR list of users IDs
@@ -108,6 +109,9 @@ def get_followers(sql, download_limit = 12500000) -> None:
     :return: none
     """
     # Block 1: Check Twitter Limits
+    startime = time.time()
+    #timeout = 86400
+    timeout = 3600
     limit = TwitterAPI.api_limit()
     ts = limit['resources']['followers']['/followers/ids']['reset']
     limit = limit['resources']['followers']['/followers/ids'][
@@ -146,6 +150,9 @@ def get_followers(sql, download_limit = 12500000) -> None:
         if screen_name != 0:
             sql = "update n_cores set followers_retrieved =' " + str(timestamp) + "' where user_id = " + str(id)
             db_functions.update_table(sql)
+        if startime - time.time() > timeout:
+            print ("###Timeout reached!###")
+            return timeout
 
 
 def download_user_timelines(political_moderate_list: list, right_wing_populists_list: list):
@@ -754,14 +761,6 @@ if __name__ == '__main__':
         classifier_pkl = config['RE_RUN_ML_FRIEND_TRAINING'].get('classifier_pkl')
         BERT_friends_ML.create_training_matrix(load_from_db, sql_left, sql_right, clf_pure_predict_path, pickle_name_left, pickle_name_right, column_list_path, classifier_pkl)
 
-    if config['TASKS'].getboolean('download_followership'):
-        user_ids = config['DOWNLOAD_FOLLOWERSHIP'].get('user_ids')
-        user_ids = user_ids.replace("INSERT_HASHTAG", "%" + hashtag + "%")
-        download_limit = config['DOWNLOAD_FOLLOWERSHIP'].getint('download_limit')
-        get_followers(user_ids, download_limit)
-        sql_insert = config['DOWNLOAD_FOLLOWERSHIP'].get('sql_insert')
-        db_functions.update_table(sql_insert)
-
     if config['TASKS'].getboolean('download_BERT_training_data'):
         # Downloads timelines for users configured in function. Used as traning material for AI
         political_moderate_list = config['DOWNLOAD_BERT_TRAINING_DATA'].get('political_moderate_list')
@@ -779,4 +778,72 @@ if __name__ == '__main__':
         sql = sql.replace("INSERT_HASHTAG", "%" + hashtag + "%")
         topic_model.topic_model_wordcloud(sql)
 
+    if config['TASKS'].getboolean('download_followership'):
+        user_ids = config['DOWNLOAD_FOLLOWERSHIP'].get('user_ids')
+        user_ids = user_ids.replace("INSERT_HASHTAG", "%" + hashtag + "%")
+        download_limit = config['DOWNLOAD_FOLLOWERSHIP'].getint('download_limit')
+        get_followers(user_ids, download_limit)
+        #Insert newly donloaded followers into n_followers
+        sql_insert_new_followers = config['DOWNLOAD_FOLLOWERSHIP'].get('sql_insert_new_followers')
+        db_functions.update_table(sql_insert_new_followers)
+        #Make sure all newly downloaded users are in table n_users
+        sql_insert = config['DOWNLOAD_FOLLOWERSHIP'].get('sql_insert')
+        db_functions.update_table(sql_insert)
+
+    if config['TASKS'].getboolean('refresh_download_followership'):
+        user_ids = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('user_ids')
+        #user_ids = user_ids.replace("INSERT_HASHTAG", "%" + hashtag + "%")
+        download_limit = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].getint('download_limit')
+        get_followers(user_ids, download_limit)
+        #Delete old followers from n_followers
+        sql_delete_old_followers = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_delete_old_followers')
+        db_functions.update_table(sql_delete_old_followers)
+        # Insert newly downloaded followers into n_followers
+        sql_insert_new_followers = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_insert_new_followers')
+        db_functions.update_table(sql_insert_new_followers)
+        #Make sure all newly donloaded users are in table n_users
+        sql_insert = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_insert')
+        db_functions.update_table(sql_insert)
+
+if config['TASKS'].getboolean('auto_run'):
+    today = date.today()
+    user_ids = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('user_ids')
+    df = db_functions.select_from_db(user_ids)
+    while True:
+        # On even days refresh followers if there is something to refresh
+        # Followers older than 6 months will be refreshed
+        if int(today.strftime("%d")) % 2 == 0 and len(df) > 0:
+            user_ids = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('user_ids')
+            df = db_functions.select_from_db(user_ids)
+            #user_ids = [df.iloc[0, 0]] #Only download one user at a time
+            download_limit = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].getint('download_limit')
+            get_followers(user_ids, download_limit)
+            # Delete old followers from n_followers
+            sql_delete_old_followers = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_delete_old_followers')
+            db_functions.update_table(sql_delete_old_followers)
+            # Insert newly downloaded followers into n_followers
+            sql_insert_new_followers = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_insert_new_followers')
+            db_functions.update_table(sql_insert_new_followers)
+            # Make sure all newly donloaded users are in table n_users
+            sql_insert = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_insert')
+            db_functions.update_table(sql_insert)
+
+        #on uneven days download new followers
+        else:
+            user_ids = config['AUTO_RUN'].get('download_followership_user_ids')
+            df = db_functions.select_from_db(user_ids)
+            #user_ids = user_ids.replace("INSERT_HASHTAG", "%" + hashtag + "%")
+            #user_ids = [df.iloc[0,0]]
+            download_limit = config['DOWNLOAD_FOLLOWERSHIP'].getint('download_limit')
+            get_followers(user_ids, download_limit)
+            # Insert newly donloaded followers into n_followers
+            sql_insert_new_followers = config['DOWNLOAD_FOLLOWERSHIP'].get('sql_insert_new_followers')
+            db_functions.update_table(sql_insert_new_followers)
+            # Make sure all newly downloaded users are in table n_users
+            sql_insert = config['DOWNLOAD_FOLLOWERSHIP'].get('sql_insert')
+            db_functions.update_table(sql_insert)
+
+# Tasks?
+#Add followers
+#refresh followers
 
