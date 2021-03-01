@@ -380,7 +380,7 @@ def API_get_single_user_object(user_id):
     """
     Uses Api to fetch user details for given ID
     :param user_id:
-    :return: nothing
+    :return: screen_name, followers_count
     """
     time.sleep(0.75)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -427,4 +427,5 @@ def API_get_single_user_object(user_id):
         cursor.execute(sql, (v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13))
     connection.commit()
     cursor.close()
-    return v3
+    print (f"{v3} Number of Followers: {v6}")
+    return v3, v6

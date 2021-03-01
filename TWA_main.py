@@ -111,7 +111,7 @@ def get_followers(sql, download_limit = 12500000, time_limit = False) -> None:
     # Block 1: Check Twitter Limits
     startime = time.time()
     #timeout = 86400
-    timeout = 3600
+    timeout = 3600 #run one iteration or one hour
     limit = TwitterAPI.api_limit()
     ts = limit['resources']['followers']['/followers/ids']['reset']
     limit = limit['resources']['followers']['/followers/ids'][
@@ -142,6 +142,14 @@ def get_followers(sql, download_limit = 12500000, time_limit = False) -> None:
             # this setting is used if we load follower for anything but cores
             id = element['id']
             screen_name = 0
+
+        #Query Twitter API to find out how many followers a user has
+        try:
+            scr_name, followers_count = TwitterAPI.API_get_single_user_object(id)
+        except ValueError:
+            print (f"User {id} not found. Skipping.")
+        if followers_count >= download_limit:
+            continue
         print("Getting Followers of " + str(id) + " | Element " + str(index + 1) + " of " + str(len(df)))
         TwitterAPI.API_Followers(screen_name, id, download_limit = download_limit)  # <== API follower retrieval
 
@@ -152,7 +160,7 @@ def get_followers(sql, download_limit = 12500000, time_limit = False) -> None:
             db_functions.update_table(sql)
         if startime - time.time() > timeout:
             print ("###Timeout reached!###")
-            return timeout
+    return id
 
 
 def download_user_timelines(political_moderate_list: list, right_wing_populists_list: list):
@@ -809,6 +817,7 @@ if config['TASKS'].getboolean('auto_run'):
     today = date.today()
     user_ids = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('user_ids')
     df = db_functions.select_from_db(user_ids)
+    ids_written = []
     while True:
         # On even days refresh followers if there is something to refresh
         # Followers older than 6 months will be refreshed
@@ -820,7 +829,7 @@ if config['TASKS'].getboolean('auto_run'):
             get_followers(user_ids, download_limit)
             # Delete old followers from n_followers
             sql_delete_old_followers = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_delete_old_followers')
-            db_functions.update_table(sql_delete_old_followers)
+            ids_written.append(db_functions.update_table(sql_delete_old_followers))
             # Insert newly downloaded followers into n_followers
             sql_insert_new_followers = config['REFRESH_DOWNLOAD_FOLLOWERSHIP'].get('sql_insert_new_followers')
             db_functions.update_table(sql_insert_new_followers)
@@ -831,17 +840,21 @@ if config['TASKS'].getboolean('auto_run'):
         #on uneven days download new followers
         else:
             user_ids = config['AUTO_RUN'].get('download_followership_user_ids')
-            df = db_functions.select_from_db(user_ids)
+            #df = db_functions.select_from_db(user_ids)
             #user_ids = user_ids.replace("INSERT_HASHTAG", "%" + hashtag + "%")
             #user_ids = [df.iloc[0,0]]
             download_limit = config['DOWNLOAD_FOLLOWERSHIP'].getint('download_limit')
-            get_followers(user_ids, download_limit)
+            ids_written.append(get_followers(user_ids, download_limit))
             # Insert newly donloaded followers into n_followers
             sql_insert_new_followers = config['DOWNLOAD_FOLLOWERSHIP'].get('sql_insert_new_followers')
             db_functions.update_table(sql_insert_new_followers)
             # Make sure all newly downloaded users are in table n_users
             sql_insert = config['DOWNLOAD_FOLLOWERSHIP'].get('sql_insert')
             db_functions.update_table(sql_insert)
+            if ids_written[-1] == ids_written[-2]:
+                print ("No more IDs to fetch. Ending auto run.")
+                sys.exit()
+
 
 # Tasks?
 #Add followers
