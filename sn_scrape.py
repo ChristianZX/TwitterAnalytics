@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import db_functions
 import TwitterAPI
+import sys
 import time
 from tqdm import tqdm
 
@@ -37,6 +38,11 @@ def SN_db_operations(hashtag: str, since: str, until: str) -> tuple:
     db_functions.drop_table(table_name)
     db_functions.create_empty_staging_table(table_name)
     tweet_ids = SN_get_tweet_ids_for_hashtag(since, until, hashtag) #downloads tweets
+    if len(tweet_ids) == 0:
+        print("####################################################")
+        print("####Warning! No Tweets fetched! Process aborted!####")
+        print("####################################################")
+        sys.exit()
     df = pd.DataFrame(tweet_ids)
     write_to_table = "update_temp"
 
@@ -67,8 +73,6 @@ def hashtag_download_launcher(hashtag, since: str, until: str, download_parent_t
     table_name, hashtag, len_df = SN_db_operations(hashtag, since, until)
     print("Hashtag Twitter ID download complete. Starting detail download.")
     bulk_size = 1000
-
-
 
     new_tweets_fetched = 1
     loop_counter = 1

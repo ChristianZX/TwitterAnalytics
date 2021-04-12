@@ -134,7 +134,10 @@ def update_table(sql):
     connection = db_connect()
     cursor = connection.cursor()
     print(f"Update starts now with statement: {sql}")
+    #try:
     cursor.execute(sql)
+    #except:
+        #print ("STOPP")
     connection.commit()
     cursor.close()
     db_close(connection)

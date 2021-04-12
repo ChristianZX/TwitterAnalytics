@@ -31,8 +31,6 @@ def topic_model_wordcloud(sql_raw):
         tokens = tokens_output
         #tokens = preprocess_documents(df['tweet'].tolist())
         stop_words = set(stopwords.words('german'))
-        [x.upper() for x in stop_words]
-        [x.title() for x in stop_words]
 
         stop_words.add('http')
         stop_words.add('Der')
@@ -42,7 +40,15 @@ def topic_model_wordcloud(sql_raw):
         stop_words.add('Was')
         stop_words.add('Und')
         stop_words.add('Wir')
+        stop_words.add('Aber')
+        stop_words.add('Ja')
+        stop_words.add('ja')
+        stop_words.add('Sie')
+        stop_words.add('schon')
+        stop_words.add('Ich')
 
+        [x.upper() for x in stop_words]
+        [x.title() for x in stop_words]
 
         #Stopword removal
         for index, element in enumerate(tokens):

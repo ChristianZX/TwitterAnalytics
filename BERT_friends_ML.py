@@ -236,9 +236,9 @@ def inference_bert_friends(classifier, column_list: list, sql: str, min_matches:
         relationship_dict[element][0].append(user_list[i])
         relationship_dict[element][1].append(rating_list[i])
 
-    #conditions_not_met_string = "" #Ids in this string will still get a last seen date in DB to ignore them during next loop
     conditions_not_met_list = []  # Ids in this list will still get a last seen date in DB to ignore them during next loop
     result_dict = {}
+    #Iteration though friend_set and prediction of faction
     for element in tqdm(friend_set):
         common_friends = set(relationship_dict[element][0]) & set(column_list)
         number_of_common_friends = len(common_friends)
@@ -288,6 +288,7 @@ def inference_bert_friends(classifier, column_list: list, sql: str, min_matches:
         sql = 'update n_users set bert_friends_ml_last_seen = temp_table."1" from temp_table where n_users.id::text = temp_table."0"'
         db_functions.update_table(sql)
         #db_functions.drop_table('temp_table')
+
     return rows_processed
 
 
@@ -311,14 +312,15 @@ def bert_friends_ml_launcher(clf_path, friend_column_list_path, sql:str, min_mat
     """
     classifier = db_functions.load_pickle(clf_path)
     column_list = db_functions.load_pickle(friend_column_list_path)
-    rows_processed = 1
-    count = 0
-    while rows_processed != 0:
-        count += 1
-        start = time.time()
-        rows_processed = inference_bert_friends(classifier, column_list, sql=sql, min_matches=min_matches)
-        processing_time = time.time()-start
-        print (f"\nIteration: {count} | Iteration time: {processing_time} | Predictions/Second:{rows_processed/processing_time}\n | Users Updated: {rows_processed}" )
+    #rows_processed = 1
+    #count = 0
+    #while rows_processed != 0:
+    #count += 1
+    start = time.time()
+    rows_processed = inference_bert_friends(classifier, column_list, sql=sql, min_matches=min_matches)
+    processing_time = time.time()-start
+    #print (f"\nIteration: {count} | Iteration time: {processing_time} | Predictions/Second:{rows_processed/processing_time}\n | Users Updated: {rows_processed}" )
+    print(f"\nTime: {processing_time} | Predictions/Second:{rows_processed / processing_time}\n | Users Updated: {rows_processed}")
 
 if __name__ == '__main__':
     #model_search()

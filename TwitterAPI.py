@@ -263,8 +263,9 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
         if result == 'Error: Not authorized': #Tweet is set to private
             error = True
         if result == 'Error: No status found with that ID.' or result == "Undefined Error":
-            sql = f"update {table_name} set tweet = 'deleted' where id = {element[1]}"
-            db_functions.update_table(sql)
+            #sql = f"update {table_name} set tweet = 'deleted' where id = {element[1]}"
+            #db_functions.update_table(sql)
+            df.tweet[df.id==element[1]]='deleted'
             error = True
         if error is False:
             df.iloc[index:index + 1, 4:5] = result[1] # date
@@ -277,10 +278,15 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
             df.iloc[index:index + 1, 18:19] = table_name
             #print ("Fetched Tweet: {}".format(element[1]))
 
+
     if len(df) == 0:
         return 0
     db_functions.df_to_sql(df, 'temp_df', 'replace')
-
+    new_tweets_fetched = helper_functions.dataframe_length(df)
+    # try:
+    #     print (new_tweets_fetched)
+    # except UnboundLocalError:
+    #     print ("STOPP")
     #update staging table with values form temp_df
     if download_parents == False:
         sql = f"""update {table_name} a set date = b.date, tweet = b.tweet, hashtags = b.hashtags,
@@ -290,14 +296,12 @@ def tweet_details_download_launcher(table_name: str, hashtag: str, bulk_size: in
     else:
         sql = f"""INSERT INTO {table_name} 
         SELECT index::bigint, id, conversation_id::bigint, created_at, date, tweet, hashtags, user_id, username, name,
-        link::bigint, retweet, nlikes::bigint, nreplies::bigint, nretweets::bigint, quote_url::bigint, user_rt_id::bigint,
+        link::bigint, retweet::bigint, nlikes::bigint, nreplies::bigint, nretweets::bigint, quote_url::bigint, user_rt_id::bigint,
         user_rt::bigint, staging_name FROM temp_df"""
         print (f"{new_tweets_fetched} parent tweets added.")
     db_functions.update_table(sql)
     db_functions.drop_table('temp_df')
-
-
-    new_tweets_fetched = helper_functions.dataframe_length(df)
+    #new_tweets_fetched = helper_functions.dataframe_length(df)
     return new_tweets_fetched
 
 
@@ -398,6 +402,7 @@ def API_get_single_user_object(user_id):
             return (e)
     v1 = int(user['id'])
     v2 = user['name']
+    v2 = v2.replace("'","") #A user once had "'" in his name
     v3 = user['screen_name']
     v4 = user['location']
     try:

@@ -224,9 +224,10 @@ def calculate_combined_score(bert_friends_high_confidence_cap_off:float, self_co
     count_too_few_bert_friends_to_rate_and_LRself_is_invalid = 0
     count_bert_friends_result_is_mediocre = 0
     count_uncategorized_accounts = 0
+    conf_bonus_for_identical_ratings = 0.2
 
     #Use BERT_FRIEND_ML rating if available, alternatively use regular BERT_FRIEND rating
-    if BERT_ML_rating != 0:
+    if BERT_ML_rating != 0 and BERT_ML_conf >= bert_friends_high_confidence_cap_off - conf_bonus_for_identical_ratings:
         friend_rating = BERT_ML_rating
         friend_conf = float(BERT_ML_conf)
         L_friends = min_required_bert_friend_opinions
@@ -242,8 +243,14 @@ def calculate_combined_score(bert_friends_high_confidence_cap_off:float, self_co
     if friend_conf > 1:
         friend_conf /= 100
 
-    if self_lr == friend_rating and self_lr in ['links', 'rechts'] and L_friends + R_friends >= min_required_bert_friend_opinions and friend_conf >= bert_friends_high_confidence_cap_off and self_lr_conf >= self_conf_high_conf_cap_off:
-        new_conf = self_lr_conf * 0.65 + friend_conf * 0.65
+    if self_lr == friend_rating and self_lr in ['links', 'rechts'] and L_friends + R_friends >= min_required_bert_friend_opinions and friend_conf >= bert_friends_high_confidence_cap_off - conf_bonus_for_identical_ratings and self_lr_conf >= self_conf_high_conf_cap_off - (conf_bonus_for_identical_ratings * 100):
+        new_conf = self_lr_conf/100 * 0.65 + friend_conf * 0.65
+        if new_conf > 1:
+            new_conf = 1
+        result = [self_lr, new_conf]
+        count_rated_accounts = 1
+    elif BERT_ML_rating != 0 and self_lr == friend_rating and self_lr in ['links', 'rechts'] and L_friends + R_friends >= min_required_bert_friend_opinions and friend_conf >= bert_friends_high_confidence_cap_off + 0.1:
+        new_conf = self_lr_conf/100 * 0.65 + friend_conf * 0.65
         if new_conf > 1:
             new_conf = 1
         result = [self_lr, new_conf]
@@ -376,7 +383,7 @@ def check_DB_users_existance(id):
     :return: True is user exists, False if not
     """
     df = db_functions.select_from_db(f"select * from n_users where id = {id}")
-    assert (len(df) <= 1),f"ERROR: Duplicate row in n_users found. Check User ID {id}"
+    #assert (len(df) <= 1),f"ERROR: Duplicate row in n_users found. Check User ID {id}"
     if len(df) == 1:
         return True
     elif len (df) == 0:
